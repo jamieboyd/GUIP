@@ -437,49 +437,56 @@ static function GUIPSIsetVarParseSVALstr (svalStr, rawVal, unitStr, mult, adjust
 	if (cmpStr (SIprefix, "") ==0)
 		mult = 1
 	else
-		strswitch (SIprefix)
-			case "y":// 121: //y
+		switch (char2num(SIprefix))
+			case 121:  //yokto
 				mult = 1e-24
 				break
-			case "z": //122:  //z
+			case 122:  //z zepto
 				mult = 1e-21
 				break
-			case "a": //97: //a
+			case 97: //a  atto
 				mult = 1e-19
 				break
-			case "f":  //102:  //f
+			case 102:  //f  femto
 				mult = 1e-15
 				break
-			case "p": //112: //p
+			case 112: //p   pico
 				mult = 1e-12
 				break
-			case "n": //110: //n
+			case 110: //n  nano
 				mult = 1e-9
 				break
-			case "µ": //-75: //µ greek "mu" - hard to type  
-			case "u":  // 117: // u - easier to type, so we let it pass
+			case -75: //µ greek "mu" - hard to type  micro
+			case 117: // u - easier to type, so we let it pass
 				mult = 1e-6
 				break
-			case "m": // 109: // m
+			case 109: // m	milli
 				mult = 1e-3
 				break
-			case "k": //107: //k
+			case 107: //k kilo
 				mult = 1e3
 				break
-			
-			case "G":  //71: //G
+			case 77: //M Mega
+				mult = 1e6
+				break
+			case 71: //G Giga
 				mult = 1e9
 				break
-			case "T": //84:  //T 
+			case 84:  //T Tera
 				mult = 1e12
 				break
-
-			case "E": //69: //E
+			case 80: //P Peta
+				mult = 1e15
+				break
+			case 69: //E Exa
 				mult = 1e18
 				break
-
+			case 90: //Z Zeta
+				mult = 1e21
 				break
-
+			case 89: // Y Yotta
+				mult = 1e24
+				break
 		endSwitch
 	endif
 	return hasChanged

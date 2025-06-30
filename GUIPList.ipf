@@ -1,7 +1,7 @@
 #pragma rtGlobals=3
 #pragma IgorVersion=6.1
 #pragma version = 1	 // Last Modified: 2016/11/04 by Jamie Boyd
-#pragma ModuleName = GUIP
+//#pragma ModuleName = GUIP
 
 // Static constants used for options variable for functions
 STATIC CONSTANT kRECURSE =1

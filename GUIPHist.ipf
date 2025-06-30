@@ -1,7 +1,7 @@
 #pragma rtGlobals=3		// Use modern global access method.
 #pragma IgorVersion=6
 #pragma version = 1	 // Last Modified: 2016/12/01 by Jamie Boyd
-#pragma ModuleName= GUIP
+//#pragma ModuleName= GUIP
 
 
 // GUIPHist organizes the plotting of data in a 2D matrix on single graph with multiple sets of bottom and left axes.

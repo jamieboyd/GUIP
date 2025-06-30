@@ -1435,9 +1435,7 @@ Static Function BRprintChars(ba) : ButtonControl
 									case  "ETB":
 										printStr += "\027"
 										break
-									case  "DC2":
-										printStr += "\030"
-										break
+	
 									case  "EM":
 										printStr += "\031"
 										break

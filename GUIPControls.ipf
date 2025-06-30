@@ -466,27 +466,20 @@ static function GUIPSIsetVarParseSVALstr (svalStr, rawVal, unitStr, mult, adjust
 			case "k": //107: //k
 				mult = 1e3
 				break
-			case "M": //77: //M
-				mult = 1e6
-				break
+			
 			case "G":  //71: //G
 				mult = 1e9
 				break
 			case "T": //84:  //T 
 				mult = 1e12
 				break
-			case "P": //80: //P
-				mult = 1e15
-				break
+
 			case "E": //69: //E
 				mult = 1e18
 				break
-			case "Z": //90: //Z
-				mult = 1e21
+
 				break
-			case "Y": //89: // Y
-				mult = 1e24
-				break
+
 		endSwitch
 	endif
 	return hasChanged

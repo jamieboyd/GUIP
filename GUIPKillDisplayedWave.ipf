@@ -1,7 +1,6 @@
 #pragma rtGlobals=3
 #pragma IgorVersion=5
 #pragma version = 1	 // Last Modified: 2013/04/05 by Jamie Boyd
-#pragma ModuleName = GUIP
 
 //******************************************************************************************************
 //KillDisplayedWave kills a wave that might be displayed, by first removing it from any open graphs and tables

@@ -1,5 +1,5 @@
 #pragma rtGlobals=3		// Use modern global access method.
-#pragma ModuleName = GUIP
+//#pragma ModuleName = GUIP
 #pragma Version =2 // Last Modified 2013/07/18 by Jamie Boyd
 
 // Boy, these were easy to write. Seriously, I use function references a fair bit and found I was making a bunch of

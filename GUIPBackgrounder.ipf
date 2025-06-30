@@ -1,7 +1,7 @@
 #pragma rtGlobals=2		// Use modern global access method.
 #pragma IgorVersion = 5.05
 #pragma version = 1.1 //last modified 2013/11/17 by Jamie Boyd
-#pragma ModuleName =GUIP
+//#pragma ModuleName =GUIP
 
 // A simple background task manager for Igor Pro 5. A global background task runs every tick (60 times a second)
 // and iterates through a task list stored in a global string. Each task in the list has an associated value for how often it

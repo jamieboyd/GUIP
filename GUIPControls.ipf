@@ -1,6 +1,7 @@
+#pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3		// Use modern global access method.
 #pragma IgorVersion=6.1
-#pragma version = 1	 // Last Modified: 2017/08/12 by Jamie Boyd
+#pragma version = 1	 // Last Modified: 2025/07/08 by Jamie Boyd
 #pragma ModuleName= GUIPControls
 
 #include "GUIPList"
@@ -10,14 +11,14 @@
 //********************************************************************************************************
 //**********************************************GUIPSetVar**************************************************
 // GUIPSIsetVarProc is a SetVariable Proc for SI Prefixes with Wavemetrics' %w Conversion Specifier
-// The %w formatting specifier prints very large or small numbers in an easily readable manner using an SI prefix such as µ, m, k, M, etc
+// The %w formatting specifier prints very large or small numbers in an easily readable manner using an SI prefix such as Âµ, m, k, M, etc
 // It would be nice to use this in a setvariable control, especially if a large range of numbers might be displayed. Unfortunately, the manual says:
 // "Never use leading text or the "%W" format for numbers, because Igor reads the value back without interpreting the extra text."
 // This procedure provides a work-around for that behaviour
 
 // Igor's usual handling variable minimum and maximum can cause problems when users enter values in the setvariable, so leave them
-// as  default values of -INF and +INF. The procedure handles Minimum and Maximum values set in the userdata, as 3rd and 4th items in
-// the  semicolon-separated list.
+// as  default values of -INF and +INF.
+
 
 //		pressing command/ctrl when clicking on the setvariable means multiply the current setvariable increment by 10
 //		option/Alt means divide the increment by10 
@@ -26,414 +27,170 @@
 
 // To Summarize
 
-// Set formatting string  to something like "%.0W1Ps".
+// Set formatting string to something like "%.0W1Ps".
 // Set setvariable procedure to SIformattedSetVarProc
 // 
 // If desired, put name of another function to run in the userdata for the setvariable 
 // Put Min and Max values for the setvariable in the user data separated by semicolons from each other and the additional procedure
 
+
+function GUIPSIsetVarEnable (panelName, setVariableName, addFuncStr, MinVal, maxVal, increment, doAutoIncr, MinIncr, nDisplayDigits, unitStr)
+	string panelName
+	string setVariableName
+	string addFuncStr
+	variable minVal
+	variable maxVal
+	variable increment
+	variable doAutoIncr
+	variable minIncr
+	variable nDisplayDigits
+	string UnitStr
+	
+	string formatStr
+	sprintf formatStr, "%%.%dW1P%s", nDisplayDigits, unitStr
+	SetVariable $setVariableName win=$panelName,limits={-inf,inf,increment}, format=formatStr
+	
+	controlinfo/W=$panelName $setVariableName
+	s_UserData = ReplaceStringByKey("addFuncStr", s_UserData, addFuncStr,":",";")
+	s_UserData = ReplaceNumberByKey("ValMin",  s_UserData, MinVal, ":", ";")
+	s_UserData = ReplaceNumberByKey("ValMax",  s_UserData, MaxVal, ":", ";")
+	s_UserData = ReplaceNumberByKey("AutoIncr", s_UserData, doAutoIncr, ":", ";")
+	if (doAutoIncr)
+		s_UserData = ReplaceNumberByKey("MinIncr", s_UserData, MinIncr, ":", ";")
+	endif
+	SetVariable $setVariableName win=$panelName, userdata=s_UserData
+end
+
+
+
+
 //*****************************************************************************************************
 //  The Setvariable procedure  reads and interprets the SI prefix
-// userdata: 0 = additional funtion to run; 1= min; 2= max;3 = addjust increment if equals "autoInc";4=allow user to change unit string is equals "adjustUnits"
-Function GUIPSIsetVarProc(sva) : SetVariableControl 
+
+Function GUIPSIsetVarProc(sva) : SetVariableControl
 	STRUCT WMSetVariableAction &sva
-	
-	switch( sva.eventCode )
-		case 1: // mouse up
-#if IgorVersion() < 7.00
-		case 2: // Enter key not neded in Igor 7 because we always get a finish edit
-#else
-		case 8: // finish edit
-#endif
-		case 3: // Live update
-			//printf "%.12f\r", sva.dVal
-			/// get user data for extra function and max and min
-			string addFuncStr = stringfromlist (0,sva.userdata)
-			variable valMin = str2num (stringfromlist (1,sva.userdata))
-			if (numtype (ValMin) == 2)
-				ValMin = -inf
-			endif
-			variable valMax = str2num (stringfromlist (2,sva.userdata))
-			if (numtype (ValMax) == 2)
-				valMax =inf
-			endif
-			variable adjustUnits =  (cmpstr ("adjustUnits", stringfromlist (4, sva.userdata)) == 0)
-			variable minIncr = str2num (stringfromlist (5, sva.userdata))
+
+	if (sva.eventCode ==8 ||sva.eventCode == 1)  // mouse up or finish edit
+		// aditonal function
+		variable hasFunc =0
+		string addFuncStr = StringByKey("addFuncStr", sva.userdata, ":",";")
+		if (cmpstr (addFuncStr, "") != 0)
+			hasFunc =1
+		endif
+		// minimum value
+		variable valMin = NumberByKey("ValMin", sva.userdata, ":",";")
+		if (numtype (ValMin) == 2)
+			ValMin = -inf
+		endif
+		// maximum value
+		variable valMax = NumberByKey("ValMax", sva.userdata, ":",";")
+		if (numtype (valMax) == 2)
+			valMax = -inf
+		endif
+		// automatically adjust increment or not
+		variable autoIncr = 0, minIncr =0
+		if (numberByKey ("AutoIncr", sva.userdata, ":",";"))
+			autoIncr = 1
+		endif
+		if (autoIncr)
+			minIncr = NumberByKey ("MinIncr", ":", ";")
 			if (numtype (minIncr) == 2)
 				minIncr = 0
 			endif
-			// we need to parse data from controlinfo for current increment
-			controlinfo/w=$sva.win $sva.ctrlName
-			string formatStr, unitStr
-			variable inc, UnitsChanged, mult
-			GUIPSIsetVarParseRecStr (S_recreation, formatStr, unitStr, inc)
-			if ((sva.eventCode  == 2) || (sva.eventCode  == 8))
-				string oldUnitStr = unitStr
-				variable rawVal = sva.dval
-				UnitsChanged = GUIPSIsetVarParseSVALstr (sva.sval, rawVal, unitStr, mult, adjustUnits)
-				if (UnitsChanged)
-					formatStr = ReplaceString(oldUnitStr, formatStr, unitStr)
-					SetVariable $sva.ctrlname win = $sva.win, format=formatStr
-					sva.dval = rawVal
+		endif
+		// Parse data from controlinfo for unit string and increment
+		variable startPos, endPos
+		variable increment
+		string unitStr
+		variable mult
+		controlinfo/w=$sva.win $sva.ctrlName
+		startPos = strsearch(S_recreation, "limits={", 0)
+		if (startPos > -1)
+			endPos = strsearch(S_recreation, "}", startPos + 9)
+			sscanf  S_recreation [startPos, endPos], "limits={%*f,%*f,%f}", increment
+		else
+			increment = 1
+		endif
+		startPos= strsearch(S_recreation, "format=\"", 0)
+		endPos = strsearch(S_recreation, "\"", startPos) + 9
+		sscanf (S_Recreation [startPos, endPos]), "format=\"%%%*f%*[W]%*d%*[P]%[^\"]*[\"]",  unitStr
+		// parse data from val string to get value and multiplier
+		variable controlValue
+		string prefList = "yzafpnuÎ¼mkMGTPEZY"
+		string SIprefixStr, SIprefix=""
+		sscanf sva.sval ,"%f%s", controlValue, SIprefixStr
+		sscanf SIprefixStr ,"%[yzafpnuÎ¼ÂµmkMGTPEZY]" + unitStr, SIprefix
+		if (numtype (controlValue) != 0) 
+			doalert 0, "trouble"
+			return 0
+		endif
+		//
+		if (sva.eventCode  == 8)		// finish edit
+			mult = GUIPSISetvarSetMult (SIprefix)
+			sva.dVal = controlValue * mult
+		elseif (sva.eventCode  == 1)		// click
+			//do modifier keys for mouse up
+			//		shift = 2
+			//		command/ctrl = 8  and means x10
+			//		option/Alt = 4 and means /10
+			//		shift-command/ctrl = 10 and means *100
+			// 		shift-option/alt = 6 and means /100
+			if ((sva.eventMod & 8) || (sva.eventMod & 4))// modifiers
+				variable HalfWay = sva.ctrlRect.top + (sva.ctrlRect.bottom - sva.ctrlRect.top)/2
+				if (sva.mouseLoc.v > HalfWay) // Down  was clicked
+					increment *= -1
 				endif
-				sva.dVal *= mult
-			elseif (sva.eventCode  == 1)
-				//do modifier keys for mouse up
-				//		shift = 2
-				//		command/ctrl = 8  and means x10
-				//		option/Alt = 4 and means /10 
-				//		shift-command/ctrl = 10 and means *100
-				// 		shift-option/alt = 6 and means /100
-				if ((sva.eventMod & 8) || (sva.eventMod & 4))// modifiers
-					variable HalfWay = sva.ctrlRect.top + (sva.ctrlRect.bottom - sva.ctrlRect.top)/2
-					if (sva.mouseLoc.v > HalfWay) // Down  was clicked
-						inc *= -1
-					endif
-					// we've already moved by inc
-					sva.dVal -= inc
-					if ((sva.eventMod & 10) == 10)  //mult by 100
-						sva.dVal += (inc*100)
-					elseif ((sva.eventMod & 6) == 6) // divide by 100
-						sva.dVal += (inc/100)
-					elseif  (sva.eventMod & 8)  //mult by 10
-						sva.dVal += (inc*10)
-					elseif  (sva.eventMod & 4)// divide by 10
-						sva.dVal += (inc/10)
-					endif
+				// we've already moved by increment
+				sva.dVal -= increment
+				if ((sva.eventMod & 10) == 10)  //mult by 100
+					sva.dVal += (increment*100)
+				elseif ((sva.eventMod & 6) == 6) // divide by 100
+					sva.dVal += (increment/100)
+				elseif  (sva.eventMod & 8)  //mult by 10
+					sva.dVal += (increment*10)
+				elseif  (sva.eventMod & 4)// divide by 10
+					sva.dVal += (increment/10)
 				endif
 			endif
-			// Make sure use of modifiers has not clobbered max or min
-			if (sva.dVal < ValMin)
-				sva.dVal = valMin
-			elseif  (sva.dVal > ValMax)
-				sva.dVal = valMax
-			endif
-			// scrunch min values to 0
-			if (abs (sva.dVal) < minIncr)
-				sva.dVal = 0
-			endif
-			// write the value back to the global variable/setvariable
-			if (cmpStr (sva.vName, "") ==0) // no variable, so must be internal value
-				SetVariable $sva.ctrlName win=$sva.win, value=_NUM:sva.dVal
-			else
-				NVAR gVal = $(S_DataFolder +  S_Value)
-				gval = sva.dVal
-			endif
-			// Adjust increment, if requested
-			if (cmpstr ("autoInc", stringfromlist (3, sva.userdata)) == 0)
-				GUIPSIsetVarAdjustIncr (sva.win, sva.ctrlName, sva.dVal, minIncr)
-			endif
-			if (cmpstr (addFuncStr, "") != 0)
-				string newSvalStr
-				Sprintf newSvalStr, formatStr, sva.dval // update sval before calling additional function
-				sva.sval = newSvalStr
-				FUNCREF  GUIPProtoFuncSetVariable extraFunc = $addFuncStr //reference to additional function to run, if any
-				extraFunc (sva)
-			endif
-			//printf "Eventcode =%d and entered value=%s while actual value is %.3W0PV \r", sva.eventCode,sva.sval, sva.dval
-
-			break
-	endswitch
+			controlValue = sva.dVal/mult
+		endif
+		// Check  max and min
+		if (sva.dVal < ValMin)
+			sva.dVal = valMin
+		elseif  (sva.dVal > ValMax)
+			sva.dVal = valMax
+		endif
+		// scrunch min values to 0
+		if (abs (sva.dVal) < minIncr)
+			sva.dVal = 0
+		endif
+		// write the value back to the global variable/setvariable
+		if (cmpStr (sva.vName, "") ==0) // no variable, so must be internal value
+			SetVariable $sva.ctrlName win=$sva.win, value=_NUM:sva.dVal
+		else
+			NVAR gVal = $(S_DataFolder +  S_Value)
+			gval = sva.dVal
+		endif
+		// Adjust increment, if requested
+		if (autoIncr)
+			GUIPSIsetVarAdjustIncr (sva.win, sva.ctrlName, sva.dVal, minIncr)
+		endif
+		if (hasFunc)
+			string newSvalStr
+			Sprintf newSvalStr, "%f %s%s", controlValue, SIprefix, unitStr // update sval before calling additional function
+			sva.sval = newSvalStr
+			FUNCREF  GUIPProtoFuncSetVariable extraFunc = $addFuncStr //reference to additional function to run, if any
+			extraFunc (sva)
+		endif
+	endif
 	return 0
 End
 
-//*****************************************************************************************************
-//  Sets user data for name of additional funtion to run when setvariable is activated
-// Last modified 2015/05/05 by Jamie Boyd
-Function GUIPSISetVarSetFunc (panelName, setVariableName, funcName)
-	String PanelName
-	String setVariableName
-	String funcName
-	
-	return GUIPSISetvarSetData (panelName, setVariableName, 0, funcName)
-end
 
-//*****************************************************************************************************
-//  Sets user data for minimum value for the setvariable
-// Last modified 2015/05/05 by Jamie Boyd
-Function GUIPSISetVarSetMin (panelName, setVariableName, minVal)
-	String PanelName
-	String setVariableName
-	variable minVal
+function GUIPSISetvarSetMult (SIprefix)
+	string SIprefix
 	
-	return GUIPSISetvarSetData (panelName, setVariableName, 1, num2str (minVal))
-end
-
-//*****************************************************************************************************
-//  Sets user data for macimum value for the setvariable
-// Last modified 2015/05/05 by Jamie Boyd
-Function GUIPSISetVarSetMax (panelName, setVariableName, maxVal)
-	String PanelName
-	String setVariableName
-	variable maxVal
-	
-	return GUIPSISetvarSetData (panelName, setVariableName, 2, num2str (maxVal))
-end
-
-//*****************************************************************************************************
-//  toggles user data for automatically adjusting increment for the setvariable
-// Last modified 2015/05/05 by Jamie Boyd
-Function GUIPSISetVarSetAutoInc (panelName, setVariableName, autoIncOn)
-	String PanelName
-	String setVariableName
-	variable autoIncOn
-	
-	if (autoIncOn)
-		return GUIPSISetvarSetData (panelName, setVariableName, 3, "autoinc")
-	else
-		return GUIPSISetvarSetData (panelName, setVariableName, 3, "no")
-	endif
-end
-
-//*****************************************************************************************************
-//  toggles user data for allowing user to change the unit string for the setvariable
-// Last modified 2015/05/05 by Jamie Boyd
-Function GUIPSISetVarSetAdustUnits (panelName, setVariableName, adjustUnitsOn)
-	String PanelName
-	String setVariableName
-	variable adjustUnitsOn
-	
-	if (adjustUnitsOn)
-		return GUIPSISetvarSetData (panelName, setVariableName, 4, "adjustUnits")
-	else
-		return GUIPSISetvarSetData (panelName, setVariableName, 4, "no")
-	endif
-end
-
-//*****************************************************************************************************
-//  Sets any of the user data for the setvariable
-// Last modified 2015/05/05 by Jamie Boyd
-Static Function GUIPSISetvarSetData (panelName, setVariableName, dataPos, value)
-	string panelName // name of panel the control is on
-	string setVariableName  // name of the Setvariable control
-	variable dataPos // 0 - 4
-	String value // string to replace previosu value
-	
-	variable useTopWindow = 0
-	if ((CmpStr (panelname , "kwTopWin") ==0) || (CmpStr (panelName , "") ==0))
-		useTopWindow = 1
-	endif
-	if  ((!(UseTopWindow)) && (StrLen (WinList(panelname, "", "WIN:65")) == 0))
-		print "GUIPSISetvarSetData could not find window, \"" +panelName + "\"."
-		return 1
-	else
-		if (UseTopWindow)
-			ControlInfo $setVariableName
-		else
-			ControlInfo/W=$panelName $setVariableName
-		endif
-		if (abs (V_Flag) !=5)
-			printf "GUIPSISetvarSetData could not find a Setvariable named \"%s\" on window \"%s\".\r",  setVariableName, panelName
-			return 1
-		else
-			// make sure we have enough items in User data list
-			variable iData
-			for (iData =  itemsinlist (S_UserData, ";"); iData < 5; iData +=1)
-				S_UserData += ";"
-			endfor
-			S_UserData = RemoveListItem(dataPos, S_UserData, ";")
-			S_UserData = AddListItem (value, S_UserData, ";", dataPos)
-			if (useTopWindow)
-				SetVariable $setVariableName userData = S_UserData
-			else
-				SetVariable $setVariableName win = $panelName, userData = S_UserData
-			endif
-			return 0
-		endif
-	endif
-end
-
-//*****************************************************************************************************
-// Returns a string with name of extra function to run after GUIPSIsetVarProc has intrepreted the value.
-// last Modified 2015/05/05 by Jamie Boyd
-Function/S GUIPSISetVarGetString (panelName, SetVariableName)
-	String panelName
-	String SetVariableName
-	
-	return GUIPSISetVarGetData (panelName, SetVariableName, 0)
-	
-end
-
-//*****************************************************************************************************
-//Returns minimum value that the variable controlled by the SetVariable can take.
-// last Modified 2015/05/05 by Jamie Boyd
-Function GUIPSISetVarGetMin (panelName, SetVariableName)
-	String panelName
-	String SetVariableName
-	
-	return Str2Num (GUIPSISetVarGetData (panelName, SetVariableName, 1))
-end
-
-//*****************************************************************************************************
-// Returns maximum value that the variable controlled by the SetVariable can take.
-// last Modified 2015/05/05 by Jamie Boyd
-Function GUIPSISetVarGetMax (panelName, SetVariableName)
-	String panelName
-	String SetVariableName
-	
-	return Str2Num (GUIPSISetVarGetData (panelName, SetVariableName, 2))
-end
-
-//*****************************************************************************************************
-// Returns the truth (0=false, non-zero = true) that autoincrementing is on
-// last Modified 2015/05/05 by Jamie Boyd
-Function GUIPSISetVarGetAutoInc (panelName, SetVariableName)
-	String panelName
-	String SetVariableName
-
-	if (CmpStr (GUIPSISetVarGetData (panelName, SetVariableName, 3), "autoinc") == 0)
-		return 1
-	else
-		return 0
-	endif
-end
-
-//*****************************************************************************************************
-// Returns the truth (0=false, non-zero = true) that user can change the SI unit string
-// last Modified 2015/05/05 by Jamie Boyd
-Function GUIPSISetVarGetAdustUnits (panelName, SetVariableName)
-	String panelName
-	String SetVariableName
-	
-	if (CmpStr (GUIPSISetVarGetData (panelName, SetVariableName, 4), "adjustUnits") == 0)
-		return 1
-	else
-		return 0
-	endif
-end
-
-//*****************************************************************************************************
-// Gets data from the Setvariable Userdata
-// last Modified 2015/05/05 by Jamie Boyd
-Static Function/S GUIPSISetVarGetData (panelName, SetVariableName, dataPos)
-	String panelName
-	String SetVariableName
-	variable dataPos
-	
-	variable useTopWindow = 0
-	if ((CmpStr (panelname , "kwTopWin") ==0) || (CmpStr (panelName , "") ==0))
-		useTopWindow = 1
-	endif
-	if  ((!(UseTopWindow)) && (StrLen (WinList(panelname, "", "WIN:65")) == 0))
-		print "GUIPSISetVarGetData could not find window, \"" +panelName + "\"."
-		return ""
-	else
-		if (UseTopWindow)
-			ControlInfo $SetVariableName
-		else
-			ControlInfo/W=$panelName $SetVariableName
-		endif
-		if (abs (V_Flag) !=5)
-			printf "GUIPSISetVarGetData could not find a Setvariable named \"%s\" on window \"%s\".\r",  SetVariableName, panelName
-			return ""
-		else
-			return StringFromList(dataPos, S_UserData, ";")
-		endif
-	endif
-end
-
-//*****************************************************************************************************
-// Parses setvariable recreation string to get format string and separate out unit string and increment
-// Last modified 2014/06/30 by Jamie Boyd
-static function GUIPSIsetVarParseRecStr (S_recreation, formatStr, unitStr, inc)
-	string &S_Recreation
-	string &formatStr
-	string &unitStr
-	variable &inc
-	
-	// get increment
-	variable startPos = strsearch(S_recreation, "limits={", 0) + 8
-	variable endPos = strsearch(S_recreation, "}", startPos)-1
-	string limtStr = S_Recreation [startPos, endPos]
-	inc = str2num (stringfromlist (2, limtStr, ","))
-	// get format string
-	startPos= strsearch(S_recreation, "format=\"", 0) + 8
-	endPos = strsearch(S_recreation, "\"", startPos)-1
-	formatStr = S_Recreation [startPos, endPos]
-	// get unit string from format string
-	startPos = strsearch(formatStr, "P", 0) + 1
-	endPos =strlen (formatStr) -1
-	unitStr = formatStr [startPos, endPos]
-end
-
-//*****************************************************************************************************
-// Parses formatted setvariable value string to get current SI character and unit string
-// sets multiplier based on SI char
-// returns 1 if unitStr has changed from the unit string set in S_recreation, else 0
-// Last modified 2014/07/17 by Jamie Boyd
-static function GUIPSIsetVarParseSVALstr (svalStr, rawVal, unitStr, mult, adjustUnits)
-	string svalStr	// sva.sval from control structure.
-	variable &rawVal
-	string &unitStr // pass in unit string from S_recreation.  May be replaced with new unit str
-	variable &mult
-	variable adjustUnits
-	
-	String SIprefix=""
-	variable hasChanged =0
-	String newUnitStr
-	String regExp = "^-?[0-9]*\.?[0-9]*e?-?[0-9]* ?([yzafpnµumkMGTPEZY])" + UnitStr + "$"
-	if (GrepString(svalStr, regExp))   // same units, and formatted o.k.
-		hasChanged =0
-		SplitString /E=(regExp) svalStr, SIprefix
-	else 
-		regExp =  "^-?[0-9]*\.?[0-9]*e?-?[0-9]* ?" + UnitStr + "$"
-		if (GrepString(svalStr, regExp))   // same units,but no SI prefix
-			hasChanged =0
-			SIprefix=""
-		else  // at this point we will query user, but will try to make a reasonable guess first
-			hasChanged = 1
-			regExp = "^-?[0-9]*\.?[0-9]*e?-?[0-9]* ?([yzafpnµumkMGTPEZY])([A-Za-z]+)$"
-			if (GrepString(svalStr, regExp))  // has SI prefix and new unit string
-				SplitString /E=(regExp) svalStr, SIprefix, newUnitStr
-			else
-				regExp = "^-?[0-9]*\.?[0-9]*e?-?[0-9]* ?([yzafpnµumkMGTPEZY])$"
-				if (GrepString(svalStr, regExp)) // has SI prefix but missing unit str
-					SplitString /E=(regExp) svalStr, SIprefix
-				else
-					regExp = "^-?[0-9]*\.?[0-9]*e?-?[0-9]* ?([A-Za-z]+)$"
-					if (GrepString(svalStr, regExp)) // missing SI prefix but present unit str
-						SplitString /E=(regExp) svalStr, newUnitStr
-					else
-						newUnitStr = unitStr
-					endif
-				endif
-			endif
-		endif
-	endif
-	if (hasChanged)
-		string helpStr = "The format for this control is a number followed by an SI/metric system prefix (e.g., m,k) followed by a unit str (e.g., m,s, Hz). "
-		helpStr += "The SI prefix can be empty to specifiy use of base units."
-		variable isOK
-		variable newRawVal = rawVal
-		prompt newRawVal, "Reset value:"
-		prompt SIprefix, "SI prefix (or blank):"
-		prompt newUnitStr, "Units:"		
-		do
-			isOk =0
-			if (adjustUnits)
-				doPrompt/HELP=helpStr  "Re-Set the value for this Control:", newRawVal,SIPrefix, NewUnitStr
-			else
-				doPrompt/HELP=helpStr  "Re-Set the value for this Control:", newRawVal,SIPrefix
-			endif
-			if (V_Flag ==0)
-				/// check values
-				if (numtype (newRawVal)== 0)
-					rawVal = newRawVal
-					if ((GrepString(SIprefix,"^[yzafpnµumkMGTPEZY]$")) || ((cmpStr (SIprefix, "") ==0)))
-						if (adjustUnits)
-							if (GrepString(newUnitStr,"^[A-Z,a-z]+$"))
-								unitStr = newUnitStr
-								isOK =1
-							endif
-						else
-							isOk=1
-						endif
-					endif
-				endif
-			endif
-		while (!(isOK))
-	endif
-	// get multiplier from SIprefix
+	variable mult
 	if (cmpStr (SIprefix, "") ==0)
 		mult = 1
 	else
@@ -456,7 +213,8 @@ static function GUIPSIsetVarParseSVALstr (svalStr, rawVal, unitStr, mult, adjust
 			case 110: //n  nano
 				mult = 1e-9
 				break
-			case -75: //µ greek "mu" - hard to type  micro
+			case 181: //Âµ  micro	greek "mu"
+			case 956:	// because this Î¼ is different from this Âµ
 			case 117: // u - easier to type, so we let it pass
 				mult = 1e-6
 				break
@@ -489,7 +247,7 @@ static function GUIPSIsetVarParseSVALstr (svalStr, rawVal, unitStr, mult, adjust
 				break
 		endSwitch
 	endif
-	return hasChanged
+	return mult
 end
 
 //*****************************************************************************************************
@@ -607,7 +365,71 @@ static Function GUIPSIsetVarAdjustIncr (windowName, ctrlName, theVal, minIncr)
 	end
 end
 
+//*****************************************************************************************************
+//  Sets user data for name of additional funtion to run when setvariable is activated
+// Last modified 2025/07/07 by Jamie Boyd
+Function GUIPSISetVarSetFunc (panelName, setVariableName, funcName)
+	String PanelName
+	String setVariableName
+	String funcName
+	
+	controlinfo/W=$panelName $setVariableName
+	s_UserData = ReplaceStringByKey("addFuncStr", s_UserData, funcName,":",";")
+	SetVariable $setVariableName win=$panelName, userdata=s_UserData
+end
 
+//*****************************************************************************************************
+//  Sets user data for minimum value for the setvariable
+// Last modified 2015/07/07 by Jamie Boyd
+Function GUIPSISetVarSetMin (panelName, setVariableName, minVal)
+	String PanelName
+	String setVariableName
+	variable minVal
+	
+	controlinfo/W=$panelName $setVariableName
+	s_UserData = ReplaceNumberByKey("ValMin", s_UserData, minVal, ":",";")
+	SetVariable $setVariableName win=$panelName, userdata=s_UserData
+end
+
+//*****************************************************************************************************
+//  Sets user data for maximum value for the setvariable
+// Last modified 2025/07/07 by Jamie Boyd
+Function GUIPSISetVarSetMax (panelName, setVariableName, maxVal)
+	String PanelName
+	String setVariableName
+	variable maxVal
+	
+	controlinfo/W=$panelName $setVariableName
+	s_UserData = ReplaceNumberByKey("ValMax", s_UserData, maxVal, ":",";")
+	SetVariable $setVariableName win=$panelName, userdata=s_UserData
+end
+
+
+//*****************************************************************************************************
+//  toggles user data for automatically adjusting increment for the setvariable
+// Last modified 2025/07/07 by Jamie Boyd
+Function GUIPSISetVarSetAutoIncr (panelName, setVariableName, autoIncrOn)
+	String PanelName
+	String setVariableName
+	variable autoIncrOn
+	
+	controlinfo/W=$panelName $setVariableName
+	s_UserData = ReplaceNumberByKey("AutoIncr", s_UserData, autoIncrOn,":",";")
+	SetVariable $setVariableName win=$panelName, userdata=s_UserData
+end
+
+
+
+Function GUIPSISetVarSetMinIncr(panelName, setVariableName, minIncr)
+	String PanelName
+	String setVariableName
+	variable minIncr
+	
+	controlinfo/W=$panelName $setVariableName
+	s_UserData = ReplaceNumberByKey("MinIncr", s_UserData, minIncr,":",";")
+	SetVariable $setVariableName win=$panelName, userdata=s_UserData
+end
+	
 //**********************************************GUIPTabControl***********************************************
 // The programmer is responsible  for showing the controls for the selected tab, and hiding controls for other tabs.  This can get out of hand quickly if your
 // tab controls are complicated. These procedures provide a way to automate the process of hiding and showing controls. They do no other tab-related

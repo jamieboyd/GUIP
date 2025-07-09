@@ -115,7 +115,7 @@ Function TSL_SetScal(sva) : SetVariableControl
 		controlinfo/w =$sva.win $sva.ctrlName
 		string formatStr, unitStr
 		variable inc
-		GUIPControls#GUIPSIsetVarParseRecStr (S_recreation, formatStr, unitStr, inc)
+		//GUIPControls#GUIPSIsetVarParseRecStr (S_recreation, formatStr, unitStr, inc)
 		SVAR optionStr = root:packages:GUIP:TIFFs:GUIPprocessOptionStr
 		strSwitch (sva.ctrlname)
 			case "DefaultXScalSetvar":

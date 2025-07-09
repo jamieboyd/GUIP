@@ -1,7 +1,7 @@
 #pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3		// Use modern global access method.
 #pragma IgorVersion=6.1
-#pragma version = 1	 // Last Modified: 2025/07/08 by Jamie Boyd
+#pragma version = 1	 // Last Modified: 2025/07/08 by Jamie Boyd - updated GUIPSIsetVar functions
 #pragma ModuleName= GUIPControls
 
 #include "GUIPList"
@@ -16,40 +16,34 @@
 // "Never use leading text or the "%W" format for numbers, because Igor reads the value back without interpreting the extra text."
 // This procedure provides a work-around for that behaviour
 
-// Igor's usual handling variable minimum and maximum can cause problems when users enter values in the setvariable, so leave them
-// as  default values of -INF and +INF.
-
 
 //		pressing command/ctrl when clicking on the setvariable means multiply the current setvariable increment by 10
 //		option/Alt means divide the increment by10 
 //		shift-command/ctrl means multiply by 100
 // 		shift-option/alt means divide by 100
 
-// To Summarize
 
-// Set formatting string to something like "%.0W1Ps".
-// Set setvariable procedure to SIformattedSetVarProc
-// 
-// If desired, put name of another function to run in the userdata for the setvariable 
-// Put Min and Max values for the setvariable in the user data separated by semicolons from each other and the additional procedure
-
-
+//*****************************************************************************************************
+// Modifies a setvariable control to use GUIPSIsetVarProc
+// Last Modified: 2025/07/08 by Jamie Boyd - first version
 function GUIPSIsetVarEnable (panelName, setVariableName, addFuncStr, MinVal, maxVal, increment, doAutoIncr, MinIncr, nDisplayDigits, unitStr)
-	string panelName
-	string setVariableName
-	string addFuncStr
-	variable minVal
-	variable maxVal
-	variable increment
-	variable doAutoIncr
-	variable minIncr
-	variable nDisplayDigits
-	string UnitStr
+	string panelName				// name of panel control is on, or empty string for topmost window
+	string setVariableName		// name of control
+	string addFuncStr			// name of additional setvariable function to run after adjusting value of variable
+	variable minVal				// minimum value variable can have
+	variable maxVal				// maximum value variable can have
+	variable increment			// increment applied on clicking up/down arrows
+	variable doAutoIncr			//if true, increment is adjusted to be 10% of value of variable
+	variable minIncr				// minimum increment allowed, useful if minVal and maxVal span 0
+	variable nDisplayDigits	// number of digits to display in the setvariable
+	string UnitStr				// base units of variable, e.g. s, m, Hz
 	
+	//update setvariable to use GUIPSIsetVarProc
 	string formatStr
 	sprintf formatStr, "%%.%dW1P%s", nDisplayDigits, unitStr
-	SetVariable $setVariableName win=$panelName,limits={-inf,inf,increment}, format=formatStr
 	
+	SetVariable $setVariableName win=$panelName,limits={-inf,inf,increment}, format=formatStr, proc=GUIPSIsetVarProc
+	// needed info is stored in key-value format in setvariable's user data
 	controlinfo/W=$panelName $setVariableName
 	s_UserData = ReplaceStringByKey("addFuncStr", s_UserData, addFuncStr,":",";")
 	s_UserData = ReplaceNumberByKey("ValMin",  s_UserData, MinVal, ":", ";")
@@ -63,10 +57,9 @@ end
 
 
 
-
 //*****************************************************************************************************
-//  The Setvariable procedure  reads and interprets the SI prefix
-
+//  The Setvariable procedure reads and interprets the SI prefix, changing the value of the variable appropriately
+// Last Modified: 2025/07/07 by Jamie Boyd - changed data to key-value format, use sscanf to parse values
 Function GUIPSIsetVarProc(sva) : SetVariableControl
 	STRUCT WMSetVariableAction &sva
 
@@ -186,7 +179,9 @@ Function GUIPSIsetVarProc(sva) : SetVariableControl
 	return 0
 End
 
-
+//*****************************************************************************************************
+// returns a multiplier calculated from an SI prefix
+// Last Modified: 2025/07/07 by Jamie Boyd - made into its own function
 function GUIPSISetvarSetMult (SIprefix)
 	string SIprefix
 	
@@ -198,22 +193,22 @@ function GUIPSISetvarSetMult (SIprefix)
 			case 121:  //yokto
 				mult = 1e-24
 				break
-			case 122:  //z zepto
+			case 122:  // z zepto
 				mult = 1e-21
 				break
-			case 97: //a  atto
+			case 97: // a  atto
 				mult = 1e-19
 				break
-			case 102:  //f  femto
+			case 102:  // f  femto
 				mult = 1e-15
 				break
-			case 112: //p   pico
+			case 112: // p   pico
 				mult = 1e-12
 				break
-			case 110: //n  nano
+			case 110: // n  nano
 				mult = 1e-9
 				break
-			case 181: //µ  micro	greek "mu"
+			case 181: // µ  micro	greek "mu"
 			case 956:	// because this μ is different from this µ
 			case 117: // u - easier to type, so we let it pass
 				mult = 1e-6
@@ -221,25 +216,25 @@ function GUIPSISetvarSetMult (SIprefix)
 			case 109: // m	milli
 				mult = 1e-3
 				break
-			case 107: //k kilo
+			case 107: // k kilo
 				mult = 1e3
 				break
-			case 77: //M Mega
+			case 77: // M Mega
 				mult = 1e6
 				break
-			case 71: //G Giga
+			case 71: // G Giga
 				mult = 1e9
 				break
-			case 84:  //T Tera
+			case 84:  // T Tera
 				mult = 1e12
 				break
-			case 80: //P Peta
+			case 80: // P Peta
 				mult = 1e15
 				break
-			case 69: //E Exa
+			case 69: // E Exa
 				mult = 1e18
 				break
-			case 90: //Z Zeta
+			case 90: // Z Zeta
 				mult = 1e21
 				break
 			case 89: // Y Yotta
@@ -252,7 +247,8 @@ end
 
 //*****************************************************************************************************
 //  Adjusts the increment of the setvariable to 1% of current order of magnitude.
-//  You need to set uservalue for min and max with this procedure
+//  You need to set min and max in user data with this procedure
+// Last Modified: 2025/07/07 by Jamie Boyd
 static Function GUIPSIsetVarAdjustIncr (windowName, ctrlName, theVal, minIncr)
 	string windowName
 	string ctrlName
@@ -367,7 +363,7 @@ end
 
 //*****************************************************************************************************
 //  Sets user data for name of additional funtion to run when setvariable is activated
-// Last modified 2025/07/07 by Jamie Boyd
+// Last modified 2025/07/07 by Jamie Boyd - now use key-value data
 Function GUIPSISetVarSetFunc (panelName, setVariableName, funcName)
 	String PanelName
 	String setVariableName
@@ -380,7 +376,7 @@ end
 
 //*****************************************************************************************************
 //  Sets user data for minimum value for the setvariable
-// Last modified 2015/07/07 by Jamie Boyd
+// Last modified 2015/07/07 by Jamie Boyd - now use key-value data
 Function GUIPSISetVarSetMin (panelName, setVariableName, minVal)
 	String PanelName
 	String setVariableName
@@ -393,7 +389,7 @@ end
 
 //*****************************************************************************************************
 //  Sets user data for maximum value for the setvariable
-// Last modified 2025/07/07 by Jamie Boyd
+// Last modified 2025/07/07 by Jamie Boyd - now use key-value data
 Function GUIPSISetVarSetMax (panelName, setVariableName, maxVal)
 	String PanelName
 	String setVariableName
@@ -406,8 +402,8 @@ end
 
 
 //*****************************************************************************************************
-//  toggles user data for automatically adjusting increment for the setvariable
-// Last modified 2025/07/07 by Jamie Boyd
+//  Sets user data for automatically adjusting increment for the setvariable
+// Last modified 2025/07/07 by Jamie Boyd - now use key-value data
 Function GUIPSISetVarSetAutoIncr (panelName, setVariableName, autoIncrOn)
 	String PanelName
 	String setVariableName
@@ -419,7 +415,9 @@ Function GUIPSISetVarSetAutoIncr (panelName, setVariableName, autoIncrOn)
 end
 
 
-
+//*****************************************************************************************************
+//  Sets user data forminimum allowed increment when automatically adjusting incremen
+// Last modified 2025/07/07 by Jamie Boyd - now use key-value data
 Function GUIPSISetVarSetMinIncr(panelName, setVariableName, minIncr)
 	String PanelName
 	String setVariableName

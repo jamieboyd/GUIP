@@ -1392,8 +1392,8 @@ Static Function TabManTabControlPopUpProc(pa) : PopupMenuControl
 				// Add a new tabControl?
 			elseif (cmpStr (popStr, "Add a New Tab Control") == 0)
 				string newTabcontrolName, NewTabName, userProcName
-				Prompt newTabName, "Name for First Tab:" 
-				Prompt newTabcontrolName, "New TabControl:" 
+				Prompt newTabName, "Name for First Tab:"
+				Prompt newTabcontrolName, "New TabControl:"
 				Prompt userProcName, "Name of extra User Proc (or \"\" if none)."
 				DoPrompt "Give the New TabControl a Name", newTabcontrolName, newTabName, userProcName
 				if (V_Flag == 1)
@@ -1432,7 +1432,7 @@ Static Function TabManTabControlPopUpProc(pa) : PopupMenuControl
 					endif
 				endif
 				variable iTab, nTabs = itemsinList (tabs)
-				redimension/n=(2,nTabs) Tablist, tablistsel
+				redimension/n=(nTabs, 2) Tablist, tablistsel
 				controlinfo/w= GUIPTab_Manager AddtoDBaseGrp
 				// if multiple controls selected, just show checks uncheked
 				if (cmpStr (S_value, "Multiple Controls Selected") == 0)
@@ -1466,7 +1466,7 @@ Static Function TabManTabControlPopUpProc(pa) : PopupMenuControl
 					endfor
 				endif
 			endif
-			// Update titlebox and dataBase for the selected tabControl 
+			// Update titlebox and dataBase for the selected tabControl
 			TabManShowDataBase (thePanel, theTabControlG)
 			break
 		case -1: // control being killed

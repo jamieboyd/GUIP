@@ -602,6 +602,58 @@ Function GUIPTabAddCtrls (tabWinStr, tabControlStr, tabStr, ctrlList, [applyAble
 end
 
 //******************************************************************************************************
+// The tab control procedure
+//
+Function GUIPTabProc(tca) : TabControl
+	STRUCT WMTabControlAction &tca
+	switch( tca.eventCode )
+	
+		case 2: // mouse up
+			// database for each tabcontrol is stored in a set of waves in a datafolder within the packages folder 
+			string folderPath = "root:packages:GUIP:TCD:" + possiblyquotename (tca.win) + ":" + tca.ctrlName + ":"
+			// get string for previous tab, and current tab
+			SVAR prevTab= $folderPath + "currentTab"
+			SVAR tabList = $folderPath + "tabList"
+			string curTab = StringFromList(tca.tab, tabList, ";") 
+			if (cmpStr (prevTab, CurTab) !=0)
+				variable iControl, nControls
+				// get list of controls from previous tab and hide them
+				WAVE/z/T ctrlNames = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlNames"
+				WAVE/z/T ctrlTypes = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlTypes"
+				WAVE/z ctrlAbles = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlAbles"
+				if ((WaveExists (ctrlNames) && waveExists (ctrlTypes)) && waveExists (ctrlAbles))
+					nControls = numPnts (ctrlNames)
+					for (iControl =0; iControl < nControls; iControl +=1)
+						GUIPTabShowHide (ctrlNames [iControl], ctrlTypes [iControl], 1, tca.win)
+					endfor
+				endif
+				// get a list of controls from new tab and show them
+				WAVE/z/T ctrlNames = $folderPath + PossiblyQuoteName (curTab) + "_ctrlNames"
+				WAVE/z/T ctrlTypes = $folderPath + PossiblyQuoteName (curTab) + "_ctrlTypes"
+				WAVE/z ctrlAbles = $folderPath + PossiblyQuoteName (curTab) + "_ctrlAbles"
+				if ((WaveExists (ctrlNames) && waveExists (ctrlTypes)) && waveExists (ctrlAbles))
+					nControls = numPnts (ctrlNames)
+					for (iControl =0; iControl < nControls; iControl +=1)
+						GUIPTabShowHide (ctrlNames [iControl], ctrlTypes [iControl], ctrlAbles [iControl], tca.win)
+					endfor
+					// extra user-defined function that runs after updating all the controls, gets the same WMTabControlAction as was passed to this function
+					SVAR/Z userUpdateFuncStr= $folderPath + "userUpdateFunc"
+					if ((SVAR_EXISTS (userUpdateFuncStr)) && (Cmpstr (userUpdateFuncStr, "") != 0))
+						FUNCREF GUIPProtoFuncTabControl UserUpdateFunc = $userUpdateFuncStr
+						UserUpdateFunc (tca)
+					endif
+				endif
+				// update curTab string
+				prevTab = CurTab
+			endif
+			break
+		case -1: // control being killed
+			break
+	endswitch
+	return 0
+End
+
+//******************************************************************************************************
 //**********************************************GUIPTab Dynamic Stuff******* ********************************
 //******************************************************************************************************
 //Removes controls from the database for a tab control
@@ -3339,12 +3391,12 @@ End
 
 
 
-Window Panel1() : Panel
+Window TogglePanel () : Panel
 	PauseUpdate; Silent 1		// building window...
 	NewPanel /W=(374,125,643,257)
 	SetDrawLayer UserBack
-	CustomControl ccToggle,pos={10,10},proc=GUIP#ToggleFunc
-	CustomControl ccToggle,userdata= A"zzz",picture= {GUIP#Toggle3PosVertTall,9}
+	CustomControl ccToggle,pos={10,10},proc=GUIPControls#ToggleFunc
+	CustomControl ccToggle,userdata= A"zzz",picture= {GUIPControls#Toggle3PosVertTall,9}
 EndMacro
 
 
@@ -3390,51 +3442,4 @@ function  SyntaxColor (element)
 	endSwitch
 end
 
-Function GUIPTabProc(tca) : TabControl
-	STRUCT WMTabControlAction &tca
-	switch( tca.eventCode )
-	
-		case 2: // mouse up
-			// database for each tabcontrol is stored in a set of waves in a datafolder within the packages folder 
-			string folderPath = "root:packages:GUIP:TCD:" + possiblyquotename (tca.win) + ":" + tca.ctrlName + ":"
-			// get string for previous tab, and current tab
-			SVAR prevTab= $folderPath + "currentTab"
-			SVAR tabList = $folderPath + "tabList"
-			string curTab = StringFromList(tca.tab, tabList, ";") 
-			if (cmpStr (prevTab, CurTab) !=0)
-				variable iControl, nControls
-				// get list of controls from previous tab and hide them
-				WAVE/z/T ctrlNames = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlNames"
-				WAVE/z/T ctrlTypes = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlTypes"
-				WAVE/z ctrlAbles = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlAbles"
-				if ((WaveExists (ctrlNames) && waveExists (ctrlTypes)) && waveExists (ctrlAbles))
-					nControls = numPnts (ctrlNames)
-					for (iControl =0; iControl < nControls; iControl +=1)
-						GUIPTabShowHide (ctrlNames [iControl], ctrlTypes [iControl], 1, tca.win)
-					endfor
-				endif
-				// get a list of controls from new tab and show them
-				WAVE/z/T ctrlNames = $folderPath + PossiblyQuoteName (curTab) + "_ctrlNames"
-				WAVE/z/T ctrlTypes = $folderPath + PossiblyQuoteName (curTab) + "_ctrlTypes"
-				WAVE/z ctrlAbles = $folderPath + PossiblyQuoteName (curTab) + "_ctrlAbles"
-				if ((WaveExists (ctrlNames) && waveExists (ctrlTypes)) && waveExists (ctrlAbles))
-					nControls = numPnts (ctrlNames)
-					for (iControl =0; iControl < nControls; iControl +=1)
-						GUIPTabShowHide (ctrlNames [iControl], ctrlTypes [iControl], ctrlAbles [iControl], tca.win)
-					endfor
-					// extra user-defined function that runs after updating all the controls, gets the same WMTabControlAction as was passed to this function
-					SVAR/Z userUpdateFuncStr= $folderPath + "userUpdateFunc"
-					if ((SVAR_EXISTS (userUpdateFuncStr)) && (Cmpstr (userUpdateFuncStr, "") != 0))
-						FUNCREF GUIPProtoFuncTabControl UserUpdateFunc = $userUpdateFuncStr
-						UserUpdateFunc (tca)
-					endif
-				endif
-				// update curTab string
-				prevTab = CurTab
-			endif
-			break
-		case -1: // control being killed
-			break
-	endswitch
-	return 0
-End
+

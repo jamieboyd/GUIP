@@ -3485,7 +3485,7 @@ End
 // Custom control that allows setting a low value and a high value form the same slider control
 // constants setting how we draw the slider. Should control more of the drawing
 static constant kScalePadding = 10		// this much horizontal padding on both sides of scale bar
-static constant kCtrlHeight = 32		// drawing height of control, might want to change if we used a bigger font for scale
+static constant kCtrlHeight = 30		// drawing height of control, might want to change if we used a bigger font for scale
 
 // mnemonic constants 
 constant kCallMouseUp = 1		// call back value for mouse up event
@@ -3651,21 +3651,21 @@ Function MinMaxSlider_thumbFunc(s)
 				val = info.scaleValMin + i * delatVal
 				xPos = info.scalePosStart + i * deltaPos
 				sprintf tempStr, formatStr, val
-				DrawLine xPos, 9, xpos, 19
-				DrawText xPos, 26, tempStr
+				DrawLine xPos, 9, xpos, 17
+				DrawText xPos, 24, tempStr
 			endfor
 			// draw left thumb
 			SetDrawEnv fillpat =3,fillfgc=(0,0,65535), linefgc=(0,0,0),linethick =1
-			DrawPoly info.L_thumbPos, 15, 1, 1, {0,0,-7,-7,-7,-15, 7, -15, 7, -7, 0,0}
+			DrawPoly info.L_thumbPos, 15, 1, 1, {0,0,-7,-7,-7,-13, 7, -13, 7, -7, 0,0}
 			SetDrawEnv linefgc=(0,0,32768),linethick =1.5, save
-			DrawLine (info.L_thumbPos -2), 9, (info.L_thumbPos -2), 2
-			DrawLine (info.L_thumbPos +2), 9, (info.L_thumbPos + 2),2
+			DrawLine (info.L_thumbPos -2), 9, (info.L_thumbPos -2), 4
+			DrawLine (info.L_thumbPos +2), 9, (info.L_thumbPos + 2),4
 			// draw right thunb
 			SetDrawEnv fillpat =3,fillfgc=(65535,0,0), linefgc=(0,0,0),linethick =1
-			DrawPoly info.R_thumbPos, 15, 1, 1, {0,0,-7,-7,-7,-15, 7, -15, 7, -7, 0,0}
+			DrawPoly info.R_thumbPos, 15, 1, 1, {0,0,-7,-7,-7,-13, 7, -13, 7, -7, 0,0}
 			SetDrawEnv linefgc=(32768,0,0),linethick =1.5, save
-			DrawLine (info.R_thumbPos -2), 9, (info.R_thumbPos -2), 2
-			DrawLine (info.R_thumbPos +2), 9, (info.R_thumbPos + 2), 2
+			DrawLine (info.R_thumbPos -2), 9, (info.R_thumbPos -2), 4
+			DrawLine (info.R_thumbPos +2), 9, (info.R_thumbPos + 2), 4
 			break
 
 		case kCCE_mousedown:

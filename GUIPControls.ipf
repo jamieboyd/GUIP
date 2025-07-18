@@ -533,7 +533,7 @@ Function GUIPTabAddTab (tabWinStr, tabControlStr, tabStr, ModTabControl)
 end
 
 //******************************************************************************************************
-//Adds controls to the database for a tab control
+//Adds controls to the database for a tab control by adding multiplecontrols to the same tab
 // last modified 2015/04/30 by Jamie Boyd
 Function GUIPTabAddCtrls (tabWinStr, tabControlStr, tabStr, ctrlList, [applyAbleState])
 	string tabWinStr //name of the window or subwindow containing the tabcontrol
@@ -602,8 +602,60 @@ Function GUIPTabAddCtrls (tabWinStr, tabControlStr, tabStr, ctrlList, [applyAble
 end
 
 //******************************************************************************************************
-// the tab procedure that shows and hides controls according to tab
-// last modified 2015/04/30 by Jamie Boyd
+//Adds controls to the database for a tab control by adding the same control to be visible on multiple tabs
+// last modified 2025/07/13 by Jamie Boyd
+Function GUIPTabAddCtrlToTabs (tabWinStr, tabControlStr, controlSpec, tabList)
+	string tabWinStr //name of the window or subwindow containing the tabcontrol
+	string  tabControlStr //name of the tabControl
+	string controlSpec // contol with info in duo format ControlType controlName  able state is always 10
+	string tabList // list of the tabs to 
+	
+
+	variable iControl, nControls
+	
+	string ControlType =  stringFromList (0, controlSpec, " ")
+	string ControlName = stringFromList (1, controlSpec, " ")
+	if (GuipControls#GUIPTabCheckControlType (ControlType))
+		printf "Control Type for %s was an invalid value, %s.\r", ControlName, ControlType
+		return 1
+	endif
+	// get path to folder for this tabcontrol 
+	string folderPath = "root:packages:GUIP:TCD:" + PossiblyQuoteName (tabWinStr) + ":" + tabControlStr + ":"
+	if (!(DataFolderExists(folderPath)))
+		printf "a Data foldedoes not exist for %s tab control", tabControlStr
+		return 1
+	endif
+	variable iTab, nTabs= itemsinlist (tabList)
+	string tabSTr
+	variable insertPos
+	for(iTab =0; iTab < nTabs;iTab +=1)
+		tabStr=stringFromList(iTab, tabList)
+		WAVE/z/T ctrlNames = $folderPath + PossiblyQuoteName (tabStr) + "_ctrlNames"
+		WAVE/z/T ctrlTypes = $folderPath + PossiblyQuoteName (tabStr) + "_ctrlTypes"
+		WAVE/z ctrlAbles = $folderPath + PossiblyQuoteName (tabStr) + "_ctrlAbles"
+
+		// if waves do not exist, make them
+		if (!((waveExists (ctrlNames) && waveExists (ctrlTypes)) && waveExists (ctrlAbles)))
+			make/o/t/n=1 $folderPath + PossiblyQuoteName (tabStr) + "_ctrlNames"
+			make/o/t/n=1 $folderPath + PossiblyQuoteName (tabStr) + "_ctrlTypes"
+			
+		endif
+
+		insertPos = GUIPMathFindText (ctrlNames, ControlName, 0, inf, 0)
+		if (insertPos < 0) // control not already added
+			insertPos = -(insertPos +1) 
+			insertpoints insertPos, 1, ctrlNames, ctrlTypes, ctrlAbles
+		endif
+		ctrlNames [insertPos] =  ControlName
+		ctrlTypes [insertPos] = ControlType
+		ctrlAbles [insertPos] =  0
+	endfor
+end
+		
+		
+//******************************************************************************************************
+// The tab control procedure
+//
 Function GUIPTabProc(tca) : TabControl
 	STRUCT WMTabControlAction &tca
 	switch( tca.eventCode )
@@ -620,7 +672,7 @@ Function GUIPTabProc(tca) : TabControl
 				// get list of controls from previous tab and hide them
 				WAVE/z/T ctrlNames = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlNames"
 				WAVE/z/T ctrlTypes = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlTypes"
-				WAVE/z ctrlAbles = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlAbles"  
+				WAVE/z ctrlAbles = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlAbles"
 				if ((WaveExists (ctrlNames) && waveExists (ctrlTypes)) && waveExists (ctrlAbles))
 					nControls = numPnts (ctrlNames)
 					for (iControl =0; iControl < nControls; iControl +=1)
@@ -652,7 +704,6 @@ Function GUIPTabProc(tca) : TabControl
 	endswitch
 	return 0
 End
-
 
 //******************************************************************************************************
 //**********************************************GUIPTab Dynamic Stuff******* ********************************
@@ -923,7 +974,6 @@ Function GUIPTabClick (tabWinStr, tabControlStr, tabStr)
 	tca.eventCode=2
 	return GUIPTabProc (tca)
 end
-
 
 //******************************************************************************************************
 //****************************************** GUIPTab Sub-Packages  *******************************************
@@ -3769,6 +3819,5 @@ function  SyntaxColor (element)
 			break
 	endSwitch
 end
-
 
 

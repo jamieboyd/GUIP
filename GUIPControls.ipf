@@ -602,6 +602,59 @@ Function GUIPTabAddCtrls (tabWinStr, tabControlStr, tabStr, ctrlList, [applyAble
 end
 
 //******************************************************************************************************
+// the tab procedure that shows and hides controls according to tab
+// last modified 2015/04/30 by Jamie Boyd
+Function GUIPTabProc(tca) : TabControl
+	STRUCT WMTabControlAction &tca
+	switch( tca.eventCode )
+	
+		case 2: // mouse up
+			// database for each tabcontrol is stored in a set of waves in a datafolder within the packages folder 
+			string folderPath = "root:packages:GUIP:TCD:" + possiblyquotename (tca.win) + ":" + tca.ctrlName + ":"
+			// get string for previous tab, and current tab
+			SVAR prevTab= $folderPath + "currentTab"
+			SVAR tabList = $folderPath + "tabList"
+			string curTab = StringFromList(tca.tab, tabList, ";") 
+			if (cmpStr (prevTab, CurTab) !=0)
+				variable iControl, nControls
+				// get list of controls from previous tab and hide them
+				WAVE/z/T ctrlNames = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlNames"
+				WAVE/z/T ctrlTypes = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlTypes"
+				WAVE/z ctrlAbles = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlAbles"  
+				if ((WaveExists (ctrlNames) && waveExists (ctrlTypes)) && waveExists (ctrlAbles))
+					nControls = numPnts (ctrlNames)
+					for (iControl =0; iControl < nControls; iControl +=1)
+						GUIPTabShowHide (ctrlNames [iControl], ctrlTypes [iControl], 1, tca.win)
+					endfor
+				endif
+				// get a list of controls from new tab and show them
+				WAVE/z/T ctrlNames = $folderPath + PossiblyQuoteName (curTab) + "_ctrlNames"
+				WAVE/z/T ctrlTypes = $folderPath + PossiblyQuoteName (curTab) + "_ctrlTypes"
+				WAVE/z ctrlAbles = $folderPath + PossiblyQuoteName (curTab) + "_ctrlAbles"
+				if ((WaveExists (ctrlNames) && waveExists (ctrlTypes)) && waveExists (ctrlAbles))
+					nControls = numPnts (ctrlNames)
+					for (iControl =0; iControl < nControls; iControl +=1)
+						GUIPTabShowHide (ctrlNames [iControl], ctrlTypes [iControl], ctrlAbles [iControl], tca.win)
+					endfor
+					// extra user-defined function that runs after updating all the controls, gets the same WMTabControlAction as was passed to this function
+					SVAR/Z userUpdateFuncStr= $folderPath + "userUpdateFunc"
+					if ((SVAR_EXISTS (userUpdateFuncStr)) && (Cmpstr (userUpdateFuncStr, "") != 0))
+						FUNCREF GUIPProtoFuncTabControl UserUpdateFunc = $userUpdateFuncStr
+						UserUpdateFunc (tca)
+					endif
+				endif
+				// update curTab string
+				prevTab = CurTab
+			endif
+			break
+		case -1: // control being killed
+			break
+	endswitch
+	return 0
+End
+
+
+//******************************************************************************************************
 //**********************************************GUIPTab Dynamic Stuff******* ********************************
 //******************************************************************************************************
 //Removes controls from the database for a tab control
@@ -870,6 +923,7 @@ Function GUIPTabClick (tabWinStr, tabControlStr, tabStr)
 	tca.eventCode=2
 	return GUIPTabProc (tca)
 end
+
 
 //******************************************************************************************************
 //****************************************** GUIPTab Sub-Packages  *******************************************
@@ -2855,6 +2909,114 @@ static Picture RockerRedOnGreenOffShort
 	ASCII85End
 End
 
+
+//******************************************************************************************************
+//****************************** GUIP Custom Controls **************************************************
+//******************************************************************************************************
+
+// Two Custom controls - a three position switch,  and a slider with two thumbs
+// constants for custom control event struct, used for custom controls below
+static constant kCCE_mousedown = 1		// mouse dbutton down in custom control
+static constant kCCE_mouseup= 2			// mouse button up in custom control
+static constant kCCE_mouseup_out =3		// mouse button was down in custom control, but was let up outside the control
+static constant kCCE_mousemoved= 4		// mouse was moved inside the custom control
+static constant kCCE_mouseDraggedOutside = 7	// mouse was dragged outside the with mouse button down
+static constant kCCE_draw= 10					// the control needs refreshing (stuff that changes every time)
+static constant kCCE_frame= 12				// Igor is about to draw a frame of your procedure picture
+static constant kCCE_drawOSBM= 17			// draw off screen BitMap (draw stuff that is the same every time)
+
+
+// ****************************** Three Position Toggle Switch *************************
+// uses a procedure pic with 9 frames (3 button positions x 3 states)
+
+// Data structure for 3 position togggle switch
+Static Structure ToggleInfo
+	Int32 thePos		// current Position (0, 1, or 2)
+	Int32 direction		//  Going down =0, going up =1
+	Int32 disabled		//set if control is disabled
+	Int32 mouseDown    // set if mouse down in control
+EndStructure
+
+// *******************************************************************
+// custom control function for the 3-position switch
+// Last Modified 2025/07/18 by Jamie Boyd
+Static Function ToggleFunc(s)
+	STRUCT WMCustomControlAction &s
+		
+	STRUCT ToggleInfo info
+	switch (s.eventCode)
+		case kCCE_frame: // calculate the correct frame, read it to the WMCustomControlAction struct
+			StructGet/S info,s.userdata
+			s.curFrame= 3*info.thePos // start at the  "normal" frame for the position
+			if (info.disabled == 1)  // disabled frame is "normal" frame + 2
+				s.curFrame +=2
+			else // mouse down position is 1 past normal frame
+				s.curFrame += info.mouseDown
+			endif
+			break
+		case kCCE_mousedown: // mouse down
+			StructGet/S info,s.userdata
+			info.mouseDown =1  // set mouseDown bit in ToggleInfo struct
+			StructPut/S info,s.userdata
+			break
+		case kCCE_mouseup_out: // mouse up outside of control 
+			StructGet/S info,s.userdata
+			info.mouseDown =0  // un-set mouseDown bit in ToggleInfo struct
+			StructPut/S info,s.userdata
+			break
+		case kCCE_mouseup:  // mouse up 
+			StructGet/S info,s.userdata
+			info.mouseDown =0 
+			if (s.eventMod & 2) // shift key was pressed, flip enabled state
+				if (info.disabled ==1)
+					info.disabled =0
+				else
+					info.disabled =1
+				endif
+			elseif (info.disabled ==0) // normal mouse-up and control is enabled
+				switch (info.thePos) // advance position up or down, depending on current position
+					case 0:
+					case 2:
+						info.thePos =1
+						break
+					case 1:
+						if (info.direction == 0)
+							info.thePos = 2
+							info.direction=1
+						else
+							info.thePos = 0
+							info.direction=0
+						endif
+						break
+				endSwitch
+			endif
+			// if a variable has been attached to this control, update it
+			if (s.isVariable)
+				s.nVal = info.thePos
+			endif
+			// You could put code here to do things immediately based on the position of the switch
+			StructPut/S info, s.userdata
+	endSwitch
+	return 0
+End
+
+// ****************************************************************************************
+// makes a panel demonstrating the switch
+function ToggleSwitchTest ()
+	Variable/G root:BigSwitchVal, root:MediumSwitchVal, root:LittleSwitchVal
+	NewPanel/N = ToggleSwitchTest/W=(374,125,440,247)
+	CustomControl ccToggle1, pos={10,10},size={48,43},focusRing=0,proc=GUIPControls#ToggleFunc
+	CustomControl ccToggle1, userdata= A"zzz",picture= {GUIPControls#Toggle3PosVertTall,9}
+	CustomControl ccToggle1, value = root:BigSwitchVal
+	CustomControl ccToggle2, pos={11,58},size={36,32},focusRing=0,proc=GUIPControls#ToggleFunc
+	CustomControl ccToggle2, userdata= A"zzz",picture= {GUIPControls#Toggle3PosVertMedium,9}
+	CustomControl ccToggle2, value= root:MediumSwitchVal
+	CustomControl ccToggle3, pos={13,95},size={24,22},focusRing=0,proc=GUIPControls#ToggleFunc
+	CustomControl ccToggle3, userdata= A"zzz", picture= {GUIPControls#Toggle3PosVertShort,9}
+	CustomControl ccToggle3, value= root:LittleSwitchVal
+EndMacro
+
+// ************************ Procedure Pictures for Toggle Switch*****************
 //Vertically oriented 3 position toggle switch. 3 positions plus mouse-down and disabled for each position = 9 pictures
 // pictures 0,3,6 are the three toggle positions in normal state: top, middle, bottom
 // pictures 1,4,7 are the  three positions with mouse depressed
@@ -3268,87 +3430,305 @@ static Picture Toggle3PosVertShort
 	ASCII85End
 End
 
-// 
-static constant kCCE_mouseup= 2
-static constant kCCE_frame= 12
-static constant kCCE_mousedown = 1
-static constant kCCE_mouseup_out =3
 
-Static Structure ToggleInfo
-	Int32 thePos		// current Position (0,1, or 2)
-	Int32 direction		//  Going down =0, going up =1
-	Int32 disabled		//set if control is disabled
-	Int32 mouseDown    // set if mouse down in control
+//**************************** Slider with two Thumbs *********************************************
+// Custom control that allows setting a low value and a high value form the same slider control
+// constants setting how we draw the slider. Should control more of the drawing
+static constant kScalePadding = 10		// this much horizontal padding on both sides of scale bar
+static constant kCtrlHeight = 32		// drawing height of control, might want to change if we used a bigger font for scale
+
+// mnemonic constants 
+constant kCallMouseUp = 1		// call back value for mouse up event
+constant kCallMouseMoved = 2	// call back value for mouse moved event
+constant kLeftThumb = 1
+constant kRIghtThumb = 2
+
+// holds all data for the control, except for the name of the function to run, which has its own named user data because it is a string
+Structure MinMaxSliderInfo
+	int16 h_off				// we need to save horizontal and vertical offsets to control because mouse positions are in panel-based coordinates
+	int16 v_off				// first thing we do for mouse down and mouse moved is subtract offsets. If you move the control on the panel,control can not track the mouse position
+	int16 scalePosStart		// position of left edge of scale bar
+	int16 scalePosEnd		// position of right edge of scalebar
+	float scaleValMin		// minimum value on the scale bar, (minimum value represented)
+	float scaleValMax		// maximum value on the scalebar
+	int16 scaleNumDivs		// number of divisions to draw for scalebar
+	int16 ScaleDec			// number of decimal places for scale divisions, or 0 for integer
+	float ValPerPos			// value Units per per position unit
+	int16 L_thumbPos		// position of left thumb
+	int16 L_thumbPos_prev	// previous position
+	float L_thumbVal		// Scaled value of left thumb
+	int16 R_thumbPos		// position of right Thumb
+	int16 R_thumbPos_prev	// previous position
+	float R_thumbVal		// Scaled value of right thumb
+	int16 thumbDown     	// set when user mousedowns on a thumb, unset when moueseup, or moves outside control. 1 for min, 2 for max
+	int16 callWhen			// if you have a function, 1 will call it with mouse up value, 2 will call it with mouse move, 3 will do both
 EndStructure
 
-Static Function ToggleFunc(s)
+// ************************************ MinMaxSlider_make ***********************************************
+// makes a slider with 2 thumbs, red one for Max value and blue one for Min value
+// last modified 2025/07/17 by Jamie Boyd
+function MinMaxSlider_make (panel, name, xPos, yPos, scalePosWidth, scaleValMin, scaleValMax, scaleDivs, ScaleDec, funcStr, callWhen)
+	string panel 			// name of panel 
+	string name 			// name for new control
+	variable xPos			// X coordinate to put new control on control panel
+	variable yPos			// Y coordinate to put new control on control panel
+	variable scalePosWidth	// width of control where scale bar is shown, control will be 2*kScalePadding wider
+	variable scaleValMin	// min value of slider
+	variable scaleValMax	// max value of slider
+	variable scaleDivs		// number of divisions of scale bar, there will be one more tick than divisions
+	variable ScaleDec		// number of decimal places used to print tick labels
+	string funcStr			// name of function to run when a value is selected by either thumb. it gets both positions plus the event type, mouse moved or mouse up
+	variable callWhen		// when to call your function, 1 is for mouse up events only, 2 is for mouse moved, 3 is for both
+	
+	// fill an info struct and copy it to a string 
+	struct MinMaxSliderInfo info
+	info.h_off = xPos
+	info.v_off = yPos + kCtrlHeight
+	info.scalePosStart = kScalePadding
+	info.scalePosEnd = kScalePadding + scalePosWidth
+	info.scaleValMin = scaleValMin
+	info.scaleValMax = scaleValMax
+	info.scaleNumDivs = scaleDivs
+	info.ValPerPos = (scaleValMax - scaleValMin)/scalePosWidth
+	info.L_thumbPos = kScalePadding
+	info.L_thumbPos_prev = info.L_thumbPos
+	info.L_thumbVal = scaleValMin
+	info.R_thumbPos = kScalePadding + scalePosWidth
+	info.R_thumbPos_prev = info.R_thumbPos
+	info.R_thumbVal = scaleValMax
+	info.thumbDown =0
+	info.ScaleDec = ScaleDec
+	info.callWhen = callWhen
+	string newUserdata				// write info struct to a string, and write the string to the main user data of the control
+	StructPut/S info,newUserdata
+	// make the control. 
+	customcontrol $name win = $panel, pos={xPos, yPos}, size = {(scalePosWidth  + 2 * kScalePadding), kCtrlHeight}
+	customcontrol $name win = $panel, userdata = newUserdata, frame =0, focusRing =0, proc = MinMaxSlider_thumbFunc
+	customcontrol $name win = $panel, userdata(FUNCSTR)=funcStr
+end
+
+// *************************************** MinMaxSlider_resized **************************************
+// resizing or moving the control messes up all the position calulations. This function readjusts the calculations
+// Last Modified 2025/07/17 by Jamie Boyd
+function MinMaxSlider_resized (thePanel, theSlider)
+	string thePanel, theSlider
+
+	STRUCT MinMaxSliderInfo info
+	controlinfo/w=$thePanel $theSlider
+	StructGet/S info, s_userdata
+	variable scalePosWidth = V_Width - 2*kScalePadding
+	info.v_off =V_top + kCtrlHeight
+	info.h_off = V_left
+	info.scalePosEnd = V_width- kScalePadding
+	info.ValPerPos = (info.scaleValMax - info.scaleValMin)/(scalePosWidth)
+	info.L_thumbPos = kScalePadding
+	info.L_thumbPos_prev = info.L_thumbPos
+	info.L_thumbVal = info.scaleValMin
+	info.R_thumbPos = kScalePadding + scalePosWidth
+	info.R_thumbPos_prev = info.R_thumbPos
+	info.R_thumbVal = info.scaleValMax
+	string newUserdata				// write info struct to a string, and write the string to the main user data of the control
+	StructPut/S info,newUserdata
+	customcontrol $theSlider win = $thePanel, userdata = newUserdata
+end
+
+// *************************************** MinMaxSlider_Manual **************************************
+//  Sets the position of a thumb to a chosen value, calling the update function
+// Last Modifies: 2027/07/18 by Jamie Boyd
+Function MinMaxSlider_Manual (thePanel, theSlider, theThumb, theVal)
+	string thePanel, theSlider
+	variable theThumb, theVal
+	
+	// get user data from cobtrol, put into info struct
+	STRUCT MinMaxSliderInfo info
+	controlinfo/w=$thePanel $theSlider
+	StructGet/S info, s_userdata
+	// check bounds
+	if ((theThumb != kLeftThumb) && (theThumb != kRightThumb))
+		return 1
+	endif
+	if ((theVal < info.scaleValMin) || (theVal > info.scaleValMax))
+		return 1
+	endif
+	// calculate new thumb position from theVal
+	variable thumbPos = kScalePadding + (theVal-info.scaleValMin)/info.ValPerPos
+	// set thumb position and value in info, and set thumDown
+	if (theThumb == kLeftThumb)
+		info.L_thumbPos = thumbPos
+		info.L_thumbVal = theVal
+		info.thumbDown = kLeftThumb
+	else
+		info.R_thumbPos = thumbPos
+		info.R_thumbVal = theVal
+		info.thumbDown = kRightThumb
+	endif
+	// make a custom action struct, fill with edited info struct, calculated mouse pos, control name, event code for mouse up
+	STRUCT WMCustomControlAction s
+	StructPut/S info, s.userdata
+	s.ctrlName = theSlider
+	s.mouseLoc.h = thumbPos + info.h_off
+	s.mouseLoc.v =  8 + info.v_off
+	s.eventCode = kCCE_mouseup
+	MinMaxSlider_thumbFunc(s)		// call MinMaxSlider_thumbFunc with structure we made
+	// reset thumb down in info struct, and write edited info back to control user data
+	info.thumbDown = 0
+	print s.userdata
+	string newUserdata				// write info struct to a string, and write the string to the main user data of the control
+	StructPut/S info, newUserdata
+	customcontrol $theSlider win = $thePanel, userdata = newUserdata
+end
+
+
+// *************************** MinMaxSlider_thumbFunc ****************************
+// function for MinMaxSlider - does all the usual slider things. Just twice
+// also prevents Min and Max values from crossing
+Function MinMaxSlider_thumbFunc(s)
 	STRUCT WMCustomControlAction &s
-		
-	STRUCT ToggleInfo info
+
+	STRUCT MinMaxSliderInfo info
+	string funcName
 	switch (s.eventCode)
-		case kCCE_frame: // calculate the correct frame, read it to the WMCustomControlAction struct
-			StructGet/S info,s.userdata
-			s.curFrame= 3*info.thePos // start at the  "normal" frame for the position
-			if (info.disabled == 1)  // disabled frame is "normal" frame + 2
-				s.curFrame +=2
-			else // mouse down position is 1 past normal frame
-				s.curFrame += info.mouseDown
+		case kCCE_draw:		// draw the scale bar
+			StructGet/S info, s.userdata
+			SetDrawEnv linethick = 2
+			drawline info.scalePosStart , 9, info.scalePosEnd, 9
+			SetDrawEnv textxjust= 1,textyjust= 1,fsize=10, save
+			variable deltaPos =(info.scalePosEnd - info.scalePosStart)/info.scaleNumDivs
+			variable delatVal = (info.scaleValMax - info.scaleValMin)/info.scaleNumDivs
+			string tempStr, formatStr = "%." + num2str (info.ScaleDec) + "f"
+			variable val, xPos, i
+			for(i=0;i <= info.scaleNumDivs;i+=1)
+				val = info.scaleValMin + i * delatVal
+				xPos = info.scalePosStart + i * deltaPos
+				sprintf tempStr, formatStr, val
+				DrawLine xPos, 9, xpos, 19
+				DrawText xPos, 26, tempStr
+			endfor
+			// draw left thumb
+			SetDrawEnv fillpat =3,fillfgc=(0,0,65535), linefgc=(0,0,0),linethick =1
+			DrawPoly info.L_thumbPos, 15, 1, 1, {0,0,-7,-7,-7,-15, 7, -15, 7, -7, 0,0}
+			SetDrawEnv linefgc=(0,0,32768),linethick =1.5, save
+			DrawLine (info.L_thumbPos -2), 9, (info.L_thumbPos -2), 2
+			DrawLine (info.L_thumbPos +2), 9, (info.L_thumbPos + 2),2
+			// draw right thunb
+			SetDrawEnv fillpat =3,fillfgc=(65535,0,0), linefgc=(0,0,0),linethick =1
+			DrawPoly info.R_thumbPos, 15, 1, 1, {0,0,-7,-7,-7,-15, 7, -15, 7, -7, 0,0}
+			SetDrawEnv linefgc=(32768,0,0),linethick =1.5, save
+			DrawLine (info.R_thumbPos -2), 9, (info.R_thumbPos -2), 2
+			DrawLine (info.R_thumbPos +2), 9, (info.R_thumbPos + 2), 2
+			break
+
+		case kCCE_mousedown:
+			StructGet/S info, s.userdata
+			s.mouseLoc.h -= info.h_off
+			s.mouseLoc.v -= info.v_off
+			if (((s.mouseLoc.v < 20) && (s.mouseLoc.h > info.L_thumbPos - 5)) && (s.mouseLoc.h < info.L_thumbPos + 3))
+				info.thumbDown = kLeftThumb
+				StructPut/S info,s.userdata	// will be written out to control
+			elseif (((s.mouseLoc.v < 20) && (s.mouseLoc.h > info.R_thumbPos - 3)) && (s.mouseLoc.h < info.R_thumbPos +5 ))
+				info.thumbDown = kRightThumb
+				StructPut/S info,s.userdata	// will be written out to control
 			endif
 			break
-		case kCCE_mousedown: // mouse down
-			StructGet/S info,s.userdata
-			info.mouseDown =1  // set mouseDown bit in ToggleInfo struct
-			StructPut/S info,s.userdata
-			break
-		case kCCE_mouseup_out: // mouse up outside of control 
-			StructGet/S info,s.userdata
-			info.mouseDown =0  // un-set mouseDown bit in ToggleInfo struct
-			StructPut/S info,s.userdata
-			break
-		case kCCE_mouseup:  // mouse up 
-			StructGet/S info,s.userdata
-			info.mouseDown =0 
-			if (s.eventMod & 2) // shift key was pressed, flip enabled state
-				if (info.disabled ==1)
-					info.disabled =0
-				else
-					info.disabled =1
+
+		case kCCE_mouseup:
+		case kCCE_mouseup_out:
+			StructGet/S info, s.userdata
+			if (info.thumbDown)
+				if (info.callWhen & kCallMouseUp)
+					funcName = getuserdata ("", s.ctrlname, "FUNCSTR")
+					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
+					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
 				endif
-			elseif (info.disabled ==0) // normal mouse-up and control is enabled
-				switch (info.thePos) // advance position up or down, depending on current position
-					case 0:
-					case 2:
-						info.thePos =1
-						break
-					case 1:
-						if (info.direction == 0)
-							info.thePos = 2
-							info.direction=1
-						else
-							info.thePos = 0
-							info.direction=0
-						endif
-						break
-				endSwitch
 			endif
-			// Put code to do things here based on the position of the switch
-			StructPut/S info,s.userdata
-	endSwitch
+			s.needAction= 1
+			info.thumbDown = 0
+			StructPut/S info,s.userdata	// will be written out to control
+			break
+
+		case kCCE_mouseDraggedOutside:
+			StructGet/S info, s.userdata
+			info.thumbDown = 0
+			StructPut/S info, s.userdata	// will be written out to control
+			break
+
+		case kCCE_mousemoved:
+			StructGet/S info, s.userdata
+			s.mouseLoc.h -= info.h_off
+			s.mouseLoc.v -= info.v_off
+			if (s.mouseLoc.h < info.scalePosStart)
+				s.mouseLoc.h = info.scalePosStart
+			elseif (s.mouseLoc.h > info.scalePosEnd)
+				s.mouseLoc.h = info.scalePosEnd
+			endif
+			if ((info.thumbdown == kLeftThumb) && (s.mouseLoc.h  != info.L_thumbPos_prev))
+				info.L_thumbPos = s.mouseLoc.h
+				info.L_thumbVal = info.scaleValMin + (info.L_thumbPos - info.scalePosStart ) * info.ValPerPos
+				if (info.L_thumbPos >= info.R_thumbPos - 4)
+					info.R_thumbPos = info.L_thumbPos + 4
+					info.R_thumbVal = info.scaleValMin + (info.R_thumbPos - info.scalePosStart ) * info.ValPerPos
+				endif
+				info.L_thumbPos_prev = s.mouseLoc.h
+				if (info.callWhen & kCallMouseMoved)
+					funcName = getuserdata ("", s.ctrlname, "FUNCSTR")
+					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
+					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
+				endif
+				StructPut/S info,s.userdata	// will be written out to control
+				s.needAction= 1
+			elseif ((info.thumbdown == kRightThumb) && (s.mouseLoc.h  != info.R_thumbPos_prev))
+				info.R_thumbPos = s.mouseLoc.h
+				info.R_thumbVal = info.scaleValMin + (s.mouseLoc.h - info.scalePosStart ) * info.ValPerPos
+				if (info.R_thumbPos <= info.L_thumbPos + 4)
+					info.L_thumbPos = info.L_thumbPos -4
+					info.L_thumbVal = info.scaleValMin + (info.L_thumbPos - info.scalePosStart ) * info.ValPerPos
+				endif
+				info.R_thumbPos_prev = s.mouseLoc.h
+				
+				if (info.callWhen & kCallMouseMoved)
+					funcName = getuserdata ("", s.ctrlname, "FUNCSTR")
+					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
+					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
+				endif
+
+				StructPut/S info,s.userdata	// will be written out to control
+				s.needAction= 1
+			endif
+			break
+	endswitch
 	return 0
 End
 
+// ************************** example action function ***************************************
+// last modified 2025/07/17 by Jamie Boyd
+// My action function runs when the slider adjusts a value. It prints the value.  Not very interesting,
+// but your action function could do a lot more
+function myAction (leftThumb, rightThumb, event, thumb)
+	variable leftThumb		// value left thumb is pointing to
+	variable rightThumb	// value right thumb is pointing to
+	variable event			// type of event (thumb up or thumb moved
+	variable thumb			// 1 if a left thumb was just moved or 2 for a right thumb
+	
+	if (thumb == kLeftThumb)
+		printf "left Thumb moved to %.2f\r", leftThumb
+	elseif (thumb == kRightThumb)
+		printf "right Thumb  moved to %.2f\r", rightThumb
+	endif
+end
+
+// ***************** MinMaxSlider test panel *************************************
+// last modified 2025/07/17 by Jamie Boyd
+function MMS_Test()
+	newpanel /N=MMS_testpanel
+	string panelName = S_name
+	MinMaxSlider_make (panelName, "MMslider", 10, 50, 200, 0, 4095, 5, 0, "myAction", 3)
+end
 
 
-Window Panel1() : Panel
-	PauseUpdate; Silent 1		// building window...
-	NewPanel /W=(374,125,643,257)
-	SetDrawLayer UserBack
-	CustomControl ccToggle,pos={10,10},proc=GUIP#ToggleFunc
-	CustomControl ccToggle,userdata= A"zzz",picture= {GUIP#Toggle3PosVertTall,9}
-EndMacro
 
 
-
+// ******************************** Notebook utility for code coloring ***************************************
+// Useful for documentation with Igor Helpfiles, edited as Notebooks.  Manual syntax  coloring for code.
 menu "Notebook"
 	SubMenu "Color"
 		"Comments/O1",/Q, SyntaxColor ("comments")
@@ -3390,51 +3770,5 @@ function  SyntaxColor (element)
 	endSwitch
 end
 
-Function GUIPTabProc(tca) : TabControl
-	STRUCT WMTabControlAction &tca
-	switch( tca.eventCode )
-	
-		case 2: // mouse up
-			// database for each tabcontrol is stored in a set of waves in a datafolder within the packages folder 
-			string folderPath = "root:packages:GUIP:TCD:" + possiblyquotename (tca.win) + ":" + tca.ctrlName + ":"
-			// get string for previous tab, and current tab
-			SVAR prevTab= $folderPath + "currentTab"
-			SVAR tabList = $folderPath + "tabList"
-			string curTab = StringFromList(tca.tab, tabList, ";") 
-			if (cmpStr (prevTab, CurTab) !=0)
-				variable iControl, nControls
-				// get list of controls from previous tab and hide them
-				WAVE/z/T ctrlNames = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlNames"
-				WAVE/z/T ctrlTypes = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlTypes"
-				WAVE/z ctrlAbles = $folderPath + PossiblyQuoteName (prevTab) + "_ctrlAbles"
-				if ((WaveExists (ctrlNames) && waveExists (ctrlTypes)) && waveExists (ctrlAbles))
-					nControls = numPnts (ctrlNames)
-					for (iControl =0; iControl < nControls; iControl +=1)
-						GUIPTabShowHide (ctrlNames [iControl], ctrlTypes [iControl], 1, tca.win)
-					endfor
-				endif
-				// get a list of controls from new tab and show them
-				WAVE/z/T ctrlNames = $folderPath + PossiblyQuoteName (curTab) + "_ctrlNames"
-				WAVE/z/T ctrlTypes = $folderPath + PossiblyQuoteName (curTab) + "_ctrlTypes"
-				WAVE/z ctrlAbles = $folderPath + PossiblyQuoteName (curTab) + "_ctrlAbles"
-				if ((WaveExists (ctrlNames) && waveExists (ctrlTypes)) && waveExists (ctrlAbles))
-					nControls = numPnts (ctrlNames)
-					for (iControl =0; iControl < nControls; iControl +=1)
-						GUIPTabShowHide (ctrlNames [iControl], ctrlTypes [iControl], ctrlAbles [iControl], tca.win)
-					endfor
-					// extra user-defined function that runs after updating all the controls, gets the same WMTabControlAction as was passed to this function
-					SVAR/Z userUpdateFuncStr= $folderPath + "userUpdateFunc"
-					if ((SVAR_EXISTS (userUpdateFuncStr)) && (Cmpstr (userUpdateFuncStr, "") != 0))
-						FUNCREF GUIPProtoFuncTabControl UserUpdateFunc = $userUpdateFuncStr
-						UserUpdateFunc (tca)
-					endif
-				endif
-				// update curTab string
-				prevTab = CurTab
-			endif
-			break
-		case -1: // control being killed
-			break
-	endswitch
-	return 0
-End
+
+

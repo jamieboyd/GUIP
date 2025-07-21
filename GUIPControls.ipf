@@ -1,7 +1,9 @@
 #pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3		// Use modern global access method.
 #pragma IgorVersion=6.1
-#pragma version = 1	 // Last Modified: 2025/07/08 by Jamie Boyd - updated GUIPSIsetVar functions
+#pragma version = 1		//	Last Modified: 2025/07/20 by Jamie Boyd added MinMax slider
+
+// Modified: 2025/07/10 by Jamie Boyd - updated GUIPSIsetVar functions
 #pragma ModuleName= GUIPControls
 
 #include "GUIPList"
@@ -3584,7 +3586,7 @@ end
 
 // *************************************** MinMaxSlider_Manual **************************************
 //  Sets the position of a thumb to a chosen value, calling the update function
-// Last Modifies: 2027/07/18 by Jamie Boyd
+// Last Modifies: 2027/07/20 by Jamie Boyd removed errant print statement
 Function MinMaxSlider_Manual (thePanel, theSlider, theThumb, theVal)
 	string thePanel, theSlider
 	variable theThumb, theVal
@@ -3622,16 +3624,35 @@ Function MinMaxSlider_Manual (thePanel, theSlider, theThumb, theVal)
 	MinMaxSlider_thumbFunc(s)		// call MinMaxSlider_thumbFunc with structure we made
 	// reset thumb down in info struct, and write edited info back to control user data
 	info.thumbDown = 0
-	print s.userdata
 	string newUserdata				// write info struct to a string, and write the string to the main user data of the control
 	StructPut/S info, newUserdata
 	customcontrol $theSlider win = $thePanel, userdata = newUserdata
 end
 
 
+// *************************************** MinMaxSlider_getThumbVal **************************************
+//  Gets the position of a thumb
+// Last Modifiesd 2027/07/20 by Jamie Boyd - initial version
+Function MinMaxSlider_getThumbVal (thePanel, theSlider, theThumb)
+	string thePanel, theSlider
+	variable theThumb
+	
+	// get user data from control, put into info struct so we can read it
+	STRUCT MinMaxSliderInfo info
+	controlinfo/w=$thePanel $theSlider
+	StructGet/S info, s_userdata
+	if (theThumb == kLeftThumb)
+		return info.L_thumbVal
+	elseif (theThumb == kRightThumb)
+		return info.R_thumbVal
+	endif
+end
+
+
 // *************************** MinMaxSlider_thumbFunc ****************************
 // function for MinMaxSlider - does all the usual slider things. Just twice
 // also prevents Min and Max values from crossing
+// last Modified 2025/07/20 by Jmaie Boyd - made scale line thicker and grey
 Function MinMaxSlider_thumbFunc(s)
 	STRUCT WMCustomControlAction &s
 
@@ -3640,7 +3661,7 @@ Function MinMaxSlider_thumbFunc(s)
 	switch (s.eventCode)
 		case kCCE_draw:		// draw the scale bar
 			StructGet/S info, s.userdata
-			SetDrawEnv linethick = 2
+			SetDrawEnv linethick = 5, linecap=1,linefgc=(43690,43690,43690)
 			drawline info.scalePosStart , 9, info.scalePosEnd, 9
 			SetDrawEnv textxjust= 1,textyjust= 1,fsize=10, save
 			variable deltaPos =(info.scalePosEnd - info.scalePosStart)/info.scaleNumDivs
@@ -3651,7 +3672,7 @@ Function MinMaxSlider_thumbFunc(s)
 				val = info.scaleValMin + i * delatVal
 				xPos = info.scalePosStart + i * deltaPos
 				sprintf tempStr, formatStr, val
-				DrawLine xPos, 9, xpos, 17
+				DrawLine xPos, 11, xpos, 17
 				DrawText xPos, 24, tempStr
 			endfor
 			// draw left thumb
@@ -3660,7 +3681,7 @@ Function MinMaxSlider_thumbFunc(s)
 			SetDrawEnv linefgc=(0,0,32768),linethick =1.5, save
 			DrawLine (info.L_thumbPos -2), 9, (info.L_thumbPos -2), 4
 			DrawLine (info.L_thumbPos +2), 9, (info.L_thumbPos + 2),4
-			// draw right thunb
+			// draw right thumb
 			SetDrawEnv fillpat =3,fillfgc=(65535,0,0), linefgc=(0,0,0),linethick =1
 			DrawPoly info.R_thumbPos, 15, 1, 1, {0,0,-7,-7,-7,-13, 7, -13, 7, -7, 0,0}
 			SetDrawEnv linefgc=(32768,0,0),linethick =1.5, save

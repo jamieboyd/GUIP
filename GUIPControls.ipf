@@ -24,75 +24,59 @@
 //		shift-command/ctrl means multiply by 100
 // 		shift-option/alt means divide by 100
 
+// Data structure for SI setvar
+Structure SIsetVarStruct
+	float valMin				//minimum val variable can take, or -INF if no limit
+	float valMax				// max val variable can take, or INF if no limit
+	float minIncrement		// minimum allowed increment if autoIncrement is true
+	uchar autoIncrement		// set to true if automatically adjusting increment based on magnitude of value
+EndStructure
+	 
 
 //*****************************************************************************************************
 // Modifies a setvariable control to use GUIPSIsetVarProc
 // Last Modified: 2025/07/08 by Jamie Boyd - first version
-function GUIPSIsetVarEnable (panelName, setVariableName, addFuncStr, MinVal, maxVal, increment, doAutoIncr, MinIncr, nDisplayDigits, unitStr)
+function GUIPSIsetVarEnable (panelName, setVariableName, addFuncStr, MinVal, MaxVal, increment, doAutoIncr, MinIncr, nDisplayDigits, unitStr)
 	string panelName				// name of panel control is on, or empty string for topmost window
 	string setVariableName		// name of control
-	string addFuncStr			// name of additional setvariable function to run after adjusting value of variable
-	variable minVal				// minimum value variable can have
-	variable maxVal				// maximum value variable can have
+	string addFuncStr			// name of additional setvariable function to run after adjusting value of variable, or "" if no function 
+	variable minVal				// minimum value variable can have, or -INF if no limit
+	variable maxVal				// maximum value variable can have, or INF if no limit
 	variable increment			// increment applied on clicking up/down arrows
 	variable doAutoIncr			//if true, increment is adjusted to be 10% of value of variable
-	variable minIncr				// minimum increment allowed, useful if minVal and maxVal span 0
+	variable minIncr				// minimum increment allowed, useful if minVal and maxVal span 0, or 0 if no limit
 	variable nDisplayDigits	// number of digits to display in the setvariable
 	string UnitStr				// base units of variable, e.g. s, m, Hz
 	
-	//update setvariable to use GUIPSIsetVarProc
+	// make format string
 	string formatStr
 	sprintf formatStr, "%%.%dW1P%s", nDisplayDigits, unitStr
-	
+	// needed info is stored in a struct in setvariable's main user data
+	struct SIsetVarStruct info
+	info.valMin = MinVal
+	info.valMax = MaxVal
+	info.minIncrement = MinIncr
+	info.autoIncrement = (doAutoIncr > 0)
+	string infoStr
+	StructPut/S info, infoStr
 	SetVariable $setVariableName win=$panelName,limits={-inf,inf,increment}, format=formatStr, proc=GUIPSIsetVarProc
-	// needed info is stored in key-value format in setvariable's user data
-	controlinfo/W=$panelName $setVariableName
-	s_UserData = ReplaceStringByKey("addFuncStr", s_UserData, addFuncStr,":",";")
-	s_UserData = ReplaceNumberByKey("ValMin",  s_UserData, MinVal, ":", ";")
-	s_UserData = ReplaceNumberByKey("ValMax",  s_UserData, MaxVal, ":", ";")
-	s_UserData = ReplaceNumberByKey("AutoIncr", s_UserData, doAutoIncr, ":", ";")
-	if (doAutoIncr)
-		s_UserData = ReplaceNumberByKey("MinIncr", s_UserData, MinIncr, ":", ";")
-	endif
-	SetVariable $setVariableName win=$panelName, userdata=s_UserData
+	SetVariable $setVariableName win=$panelName, userdata=infoStr, userdata (FUNCSTR)=addFuncStr
 end
 
 
 
 //*****************************************************************************************************
 //  The Setvariable procedure reads and interprets the SI prefix, changing the value of the variable appropriately
-// Last Modified: 2025/07/07 by Jamie Boyd - changed data to key-value format, use sscanf to parse values
+// Last Modified: 2025/07/21 by Jamie Boyd - changed data to structure format, use sscanf to parse values
 Function GUIPSIsetVarProc(sva) : SetVariableControl
 	STRUCT WMSetVariableAction &sva
 
 	if (sva.eventCode ==8 ||sva.eventCode == 1)  // mouse up or finish edit
-		// aditonal function
-		variable hasFunc =0
-		string addFuncStr = StringByKey("addFuncStr", sva.userdata, ":",";")
-		if (cmpstr (addFuncStr, "") != 0)
-			hasFunc =1
-		endif
-		// minimum value
-		variable valMin = NumberByKey("ValMin", sva.userdata, ":",";")
-		if (numtype (ValMin) == 2)
-			ValMin = -inf
-		endif
-		// maximum value
-		variable valMax = NumberByKey("ValMax", sva.userdata, ":",";")
-		if (numtype (valMax) == 2)
-			valMax = -inf
-		endif
-		// automatically adjust increment or not
-		variable autoIncr = 0, minIncr =0
-		if (numberByKey ("AutoIncr", sva.userdata, ":",";"))
-			autoIncr = 1
-		endif
-		if (autoIncr)
-			minIncr = NumberByKey ("MinIncr", ":", ";")
-			if (numtype (minIncr) == 2)
-				minIncr = 0
-			endif
-		endif
+		// get info from struct
+		controlinfo/w=$sva.win $sva.ctrlName
+		Struct SIsetVarStruct info
+		StructGet/S info, S_UserData
+		
 		// Parse data from controlinfo for unit string and increment
 		variable startPos, endPos
 		variable increment
@@ -119,7 +103,8 @@ Function GUIPSIsetVarProc(sva) : SetVariableControl
 			doalert 0, "trouble"
 			return 0
 		endif
-		//
+		
+		
 		if (sva.eventCode  == 8)		// finish edit
 			mult = GUIPSISetvarSetMult (SIprefix)
 			sva.dVal = controlValue * mult
@@ -150,13 +135,13 @@ Function GUIPSIsetVarProc(sva) : SetVariableControl
 			controlValue = sva.dVal/mult
 		endif
 		// Check  max and min
-		if (sva.dVal < ValMin)
-			sva.dVal = valMin
-		elseif  (sva.dVal > ValMax)
-			sva.dVal = valMax
+		if (sva.dVal < info.ValMin)
+			sva.dVal = info.valMin
+		elseif  (sva.dVal > info.ValMax)
+			sva.dVal = info.valMax
 		endif
 		// scrunch min values to 0
-		if (abs (sva.dVal) < minIncr)
+		if (abs (sva.dVal) < info.minIncrement)
 			sva.dVal = 0
 		endif
 		// write the value back to the global variable/setvariable
@@ -167,19 +152,20 @@ Function GUIPSIsetVarProc(sva) : SetVariableControl
 			gval = sva.dVal
 		endif
 		// Adjust increment, if requested
-		if (autoIncr)
-			GUIPSIsetVarAdjustIncr (sva.win, sva.ctrlName, sva.dVal, minIncr)
+		if (info.autoIncrement)
+			GUIPSIsetVarAdjustIncr (sva.win, sva.ctrlName, sva.dVal, info.minIncrement)
 		endif
-		if (hasFunc)
-			string newSvalStr
-			Sprintf newSvalStr, "%f %s%s", controlValue, SIprefix, unitStr // update sval before calling additional function
-			sva.sval = newSvalStr
-			FUNCREF  GUIPProtoFuncSetVariable extraFunc = $addFuncStr //reference to additional function to run, if any
-			extraFunc (sva)
-		endif
+		
+		string newSvalStr
+		Sprintf newSvalStr, "%f %s%s", controlValue, SIprefix, unitStr // update sval before calling additional function
+		sva.sval = newSvalStr
+		
+		FUNCREF  GUIPProtoFuncSetVariable extraFunc = $GetUserData(sva.win, sva.ctrlName, "FUNCSTR") //reference to additional function to run, if any
+		extraFunc (sva)
 	endif
 	return 0
 End
+
 
 //*****************************************************************************************************
 // returns a multiplier calculated from an SI prefix
@@ -3600,8 +3586,8 @@ Function MinMaxSlider_Manual (thePanel, theSlider, theThumb, theVal)
 	
 	// get user data from cobtrol, put into info struct
 	STRUCT MinMaxSliderInfo info
-	controlinfo/w=$thePanel $theSlider
-	StructGet/S info, s_userdata
+	//controlinfo/w=$thePanel $theSlider
+	StructGet/S info, GetUserData(thePanel, theSlider, "" )
 	// check bounds
 	if ((theThumb != kLeftThumb) && (theThumb != kRightThumb))
 		return 1
@@ -3646,8 +3632,7 @@ Function MinMaxSlider_getThumbVal (thePanel, theSlider, theThumb)
 	
 	// get user data from control, put into info struct so we can read it
 	STRUCT MinMaxSliderInfo info
-	controlinfo/w=$thePanel $theSlider
-	StructGet/S info, s_userdata
+	StructGet/S info, GetUserData(thePanel, theSlider, "" )
 	if (theThumb == kLeftThumb)
 		return info.L_thumbVal
 	elseif (theThumb == kRightThumb)

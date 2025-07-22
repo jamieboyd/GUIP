@@ -2533,21 +2533,28 @@ end
 //******************************************************************************************************
 // A procedure to toggle radio buttons, making use of the control's userdata. The user data for each radio button in a group must contain the names
 // of the other buttons in the group, and this procedure will make sure that they are turned off 
-// last modified Mar 19 2012 by Jamie Boyd
+// last modified 2025/07/21 by Jamie Boyd - added ability to set a global to position of active checkBox
 Function GUIPRadioButtonProc(cba) : CheckBoxControl
 	STRUCT WMCheckboxAction &cba
-
 	switch( cba.eventCode )
 		case 2: // mouse up
 			Variable checked = cba.checked
 			string sibStr = cba.userData
 			string winStr = cba.win
+			string aSib
 			variable ii, numSibs = itemsinList (sibStr, ";")
 			for (ii = 0; ii < numSibs; ii += 1)
-				checkBox $stringfromList (ii, sibStr, ";"), win = $winStr, value = 0
+				aSib = stringfromList (ii, sibStr, ";")
+				if (cmpStr (cba.ctrlname, aSib) ==0)
+					NVAR/Z theValue = $getuserData(winStr, aSib, "gValue")
+					if (NVAR_Exists(theValue))
+						theValue = ii
+					endif
+				else
+					checkBox $aSib, win = $winStr, value = 0
+				endif
 			endfor
 			break
-			
 	endswitch
 	return 0
 End

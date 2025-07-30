@@ -878,6 +878,9 @@ Function/WAVE GUIPGaussianLine2 (kernelSigma, cutOffFactSigma)
 end
 
 
+
+
+
 //******************************************************************************************************
 //Grepish = Limited support of GREP-like features for use on Igor 5. Igor 6 has grep built in
 //******************************************************************************************************

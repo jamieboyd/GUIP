@@ -1,17 +1,17 @@
 #pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3
 #pragma IgorVersion= 6.1
-#pragma version= 2.1		//last modified 2016/11/17 by Jamie Boyd
+#pragma version= 3.0		//last modified 2025/07/30 by Jamie Boyd
 
-//Provides some tools to deal with fitting graph subwindows within the host window
-// and making the content of each subwindow equivalent. 
-// 1) Assumptions: all data is plotted on the left and bottom axes
-// 2) Subwindows were added in order from left-to-right and top-to-bottom
-// 3) number of columns and number of rows of subWindows are stored in key:value; format in window note,
-// with the keys being nCols and nRows. AspRat= 0 if ignoring aspect ratio, else whatever you want it fixed to
+// Provides some tools to deal with fitting graph subwindows within a host window:
+// in a matrix of a defined number of columns and rows
+// keeping the size of each subwindow the same.
+// making the x/y range of each subwindow equivalent. 
+// optionaly keeping a fixed aspect ratio of 1 when resizing (good for images in graphs)
+// with external control panel to manipulate subwindows
 
-// Code for a listing possible arrangements (as for a popupmenu) as well as the popUpmenu procedure to do the rearranging is also
-// provided. Both function in the context of the top graph. Name the popupmenu GUIPSubWin_PopMenu. and have its proc and value as:
+// Code for listing possible arrangements of columns and rows (as for a popupmenu) as well as a popUpmenu procedure to do the rearranging is also
+// provided. Both function in the context of the top graph. 
 //	PopupMenu GUIPSubWin_PopMenu,proc=GUIPSubWin_ArrangePopMenuProc,title="Arrange "
 //	PopupMenu GUIPSubWin_PopMenu,value= #"GUIPSubWin_ListArrangments ()"
 
@@ -23,114 +23,42 @@ Menu "GraphMarquee"
 end
 
 //***********************************************************************************	
-//Marquee function to expand the axes of multiple subwindow graphs -  This only works for  left and bottom axes
-// Last Modified 2016/11/03 by Jamie Boyd
-Function GUIPSubWin_Expand ()
-	
-	GetMarquee/K left, bottom
-	string baseName = stringfromlist (0, S_marqueeWin, "#")
-	string graphList = ChildWindowList(baseName)
-	if (cmpstr (graphList, "") == 0)
-		Setaxis bottom V_left, V_right
-		Setaxis left V_bottom, V_top
-	else
-		variable ii, nGraphs = itemsinlist (graphList, ";")
-		string subWinStr
-		for (ii =0; ii < nGraphs;ii+=1)
-			SubWinStr = baseName + "#" + stringfromlist (ii, graphList)
-			Setaxis/W=$SubWinStr bottom V_left, V_right
-			Setaxis /W=$SubWinStr left V_bottom, V_top
-		endfor
-		GUIPSubWin_FitSubWindows (baseName)
-	endif
-end
-
-//***********************************************************************************	
-//Marquee function to shrink the axes of all subwindows in a graph - just for left and bottom axes
-// Last Modified 2016/11/03 by Jamie Boyd
-Function GUIPSubWin_Shrink ()
-	
-	GetMarquee/K left, bottom
-	string baseName = stringfromlist (0, S_marqueeWin, "#")
-	string graphList = ChildWindowList(baseName)
-	// get axis values for left and right axis from active subwindow only - We'll assume they are all the same
-	GetAxis/q bottom
-	variable axRange = (V_max - V_min)* ((V_max - V_min)/(V_right - V_left))/2
-	variable axCenter= V_left +  (V_right-V_left)/2 
-	Getaxis/q left
-	variable ayRange = (V_max - V_min)* ((V_max - V_min)/(V_top- V_bottom))/2
-	variable ayCenter = V_bottom + (V_top - V_bottom)/2
-	if (cmpstr (graphList, "") == 0)
-		Setaxis bottom axCenter-axRange , axCenter + axRange
-		Setaxis left ayCenter-ayRange , ayCenter + ayRange
-	else
-		variable ii, nGraphs = itemsinlist (graphList, ";")
-		string subWinStr
-		for (ii = 0; ii < nGraphs;ii+=1)
-			SubWinStr =  baseName +  "#" + stringfromlist (ii, graphList)
-			Setaxis/W= $SubWinStr bottom axCenter-axRange , axCenter + axRange
-			Setaxis /W= $SubWinStr left ayCenter-ayRange , ayCenter + ayRange
-		endfor
-		GUIPSubWin_FitSubWindows (baseName)
-	endif
-end
-
-//***********************************************************************************	
-// sets the aspect ratio stored in the window note
-// Call GUIPSubWin_FitSubWindows (graphName) to apply new setting for Aspect Ratio
-// Last Modified 2016/11/03 by Jamie Boyd
-Function GUIPSubWin_SetAspRat (graphName, AspRat)
-	String graphName
-	variable AspRat
-	
-	Getwindow $graphName note
-	S_Value = ReplaceNumberByKey("AspRat", S_Value, AspRat, ":", ";")
-	SetWindow $graphName note = S_Value
-end
-
-//***********************************************************************************	
-// a structure used to pass variables to the different functions
-// Last Modified 2016/11/03 by Jamie Boyd
+// a structure used to pass arguments to the plotting function, just because there are potentially so many of them
+// Last Modified 2025/07/29 by Jamie Boyd
 Structure GUIPSubWin_UtilStruct
-	string graphName // name of graph to use, or to make. If making a graph, and name is taken, actual name will be placed back here
-	string graphTitle // if making a new graph, title of graph
-	variable killBehavior // if making a new graph, kill behavior when closed, as defined by Display/k=killBehavior
-						//k =0:	Normal with dialog (default).
-						//k =1:	Kills with no dialog.
-						//k =2:	Disables killing.
-						//k =3:	Hides the window.
-	variable nSubWins // number of subwindows  being added, max is arbitrarily set at 32. Increase by increasing size of contentStructs array
-	STRUCT GUIPSubWin_ContentStruct contentStructs [32] // content to pass to callback plotting function
-	FUNCREF GUIPSubWin_AddProto addContent  // call back function to add content to each subwindow. 
-	variable wLeft // if making a new graph, left position of main graph
-	variable wTop // if making a new graph, top position of main graph
-	variable wBottom // if making a new graph, right position of main graph
-	variable wRight // if making a new graph, bottom position of main graph
-	variable nCols // number of columns  to use when arranging subwindows - stored in window note
-	variable nRows // number of rows to use when arranging subwindows - stored in wavenote
-	variable prefMoreCols // 1 if prefer more columns when adding more rows or columns, 0 if prefer more rows
-	variable aspectRatio // pass 1, e.g., to preserve 1:1 aspect ratio for left and bottom axes, pass 0 to not hold aspect constant
-	variable maxWidth // maximum width you would like the grpah to be allowed to grow to, or 0 to not limit width, or -1 to limit monitor/Igor frame size
-	variable maxHeight // maximum height you would like the graph to be able to expand to, or 0 to not limit height, or -1 to limit to monitor/Igor frame size
-	variable yokedAxes // 1 to keep each subwindow with same horizontal and vertical range and scaling, 0 to set each subwindow independently
-	variable marginL // graph margins (left, top, right, bottom) - default margins are difficult to deal with, a size changes so much
-	variable marginT
-	variable marginR
-	variable marginB
+	string graphName 			// name of graph to use, or to make. If making a graph, and name is taken, actual name will be placed back here
+	string graphTitle 			// title of graph
+	variable killBehavior		// kill behavior when closed, as defined by Display/k=killBehavior
+									//k =0:	Normal with dialog (default).
+									//k =1:	Kills with no dialog.
+									//k =2:	Disables killing.
+									//k =3:	Hides the window.
+	variable nSubWins			// number of subwindows being added, max is arbitrarily set at 32. Increase by increasing size of contentStructs array
+	STRUCT GUIPSubWin_ContentStruct contentStructs [32]		// content to pass to callback plotting function
+	variable nCols 				// number of columns  to use when arranging subwindows - stored in window note
+	variable nRows 				// number of rows to use when arranging subwindows - stored in wavenote
+	variable prefMoreCols 	// 1 to add another column when adding a subwindow over-flows into a new rows or columns, 0 if prefer more rows
+	variable holdAspect 		// set to preserve 1:1 aspect ratio for left and bottom axes when resizing host window, clear to not hold aspect constant
+	variable reSizeByWidth	// if holdAspect is on, set to 1 if you want to resize graph by width (dragging from left or right edge), 0 if resizing by height
+	variable xStart 			// left point of bottom axis on graph space
+	variable xEnd				// right point of bottom axis on graph space
+	variable yStart				// bottom point of ledft axis on graph space
+	variable yEnd				// top point of ledft axis on graph space
 endstructure
 
 //***********************************************************************************	
 // a structure to hold data used for callbacks to user's plotting functions
-// Last Modified 2016/11/03 by Jamie Boyd
+// Last Modified 2025/07/29 by Jamie Boyd
 Structure GUIPSubWin_ContentStruct
-	string subWin // name of subwindow
-	variable iSubWin // plotting order of subwindow; will be filled in by GUIPSubWin when plotting. Probbaly not very useful
-	variable nUserWaves // number of waves used, maximum is 32
-	WAVE userWaves [32] // waves to do what you want with
-	variable nUserStrings // number of strings used, maximum is 32
-	string userStrings [32] // strings to do what you want with
-	variable nUserVariables // number of variables used, maximum is 32
-	variable userVariables [32] // variables to do waht you want with
+	string graphName					// name of window to add subwindow to
+	string subWin 						// name of subwindow, must be unique
+	variable nUserWaves 				// number of waves used, maximum is 32
+	WAVE userWaves [32] 				// space for 32 waves to do what you want with
+	variable nUserStrings 			// number of strings used, maximum is 32
+	string userStrings [32] 			// strings to do what you want with
+	variable nUserVariables 			// number of variables used, maximum is 32
+	variable userVariables [32] 	// variables to do what you want with
+	FUNCREF GUIPSubWin_AddProto addContent  // call back function to add content to this subwindow. 
 endstructure
 
 //***********************************************************************************	
@@ -140,22 +68,130 @@ function GUIPSubWin_AddProto (s)
 	STRUCT GUIPSubWin_ContentStruct &s
 end
 
+// ************************************************************************************
+// A structure to hold information about the window, stored in named Window user data
+// Last Modified 2025/07/29 by Jamie Boyd
+Structure GUIPSubWin_WinInfoStruct
+	uint16 nCols			// number of columns in the matrix of subwindows
+	uint16 nRows			// number of rows in the matrix of subwindows
+	float xStart				// X axis start, held the same for all graphs. often 0 for an image
+	float xEnd				// X axis end, held the same for all graphs. often pixWidth * xPixSize
+	float yStart				// Y axis start, held the same for all graphs.
+	float yEnd				// for an image, height x yPixel Size
+	uChar holdAspect		// set to hold x-y axes aspect ratio to 1, what you mostly want for images
+	uChar prefMoreCols		// when adding subwindows, add a column if matrix is full
+	uChar reSizeByWidth
+endstructure
+
+//***********************************************************************************	
+//Marquee function to expand the axes of multiple subwindow graphs -  This assumes left and bottom axes
+// Last Modified 2025/067/03 by Jamie Boyd
+Function GUIPSubWin_Expand ()
+	// get info from marquee
+	GetMarquee/K left, bottom
+	string hostWin = stringfromlist (0, S_marqueeWin, "#")
+	string graphList =RemoveFromList("controlPanel", childwindowList (hostWin), ";", 0)
+	variable nSubWins = itemsinList (graphList)
+	// update axis range info in window user data
+	STRUCT GUIPSubWin_WinInfoStruct info
+	StructGet/S info, GetUserData (hostWin, "", "subwinUtil")
+	info.xStart = V_left
+	info.xEnd = V_Right
+	info.yStart = V_Bottom
+	info.yEnd = V_Top
+	string infoStr
+	StructPut/S info, infoStr
+	SetWindow $hostWin userData (subwinUtil) = infoStr
+	// update all the subwindows
+	variable iSubWin
+	string subWinStr
+	for (iSubWin =0; iSubWin < nSubWins; iSubWin +=1)
+		SubWinStr = hostWin + "#" + stringfromlist (iSubWin, graphList)
+		Setaxis/W=$SubWinStr bottom V_left, V_right
+		Setaxis /W=$SubWinStr left V_bottom, V_top
+	endfor
+	// adjust aspect ratio 
+	if (info.holdAspect)
+		if (info.reSizeByWidth)
+			ModifyGraph/w=$hostWin width=0, height={Plan,(((info.yEnd - info.yStart) * info.nRows)/((info.xend - info.xStart) * info.nCols)),left,bottom}
+		else
+			ModifyGraph/w=$hostWin height=0, width={Plan,(((info.xend - info.xStart) * info.nCols)/((info.yEnd - info.yStart) * info.nRows)),bottom,left}
+		endif
+	endif
+end
+
+//***********************************************************************************	
+//Marquee function to shrink the axes of all subwindows in a graph - just for left and bottom axes
+// Last Modified 2025/07/29 by Jamie Boyd
+Function GUIPSubWin_Shrink ()
+	// get info from marquee
+	GetMarquee/K left, bottom
+	string hostWin = stringfromlist (0, S_marqueeWin, "#")
+	string graphList =RemoveFromList("controlPanel", childwindowList (hostWin), ";", 0)	
+	variable nSubWins = itemsinList(graphList)
+	STRUCT GUIPSubWin_WinInfoStruct info
+	StructGet/S info, GetUserData (hostWin, "", "subwinUtil")
+	GetAxis/q bottom
+	variable axRange = (V_max - V_min)* ((V_max - V_min)/(V_right - V_left))/2
+	variable axCenter= V_left +  (V_right-V_left)/2 
+	info.xStart = axCenter - axRange
+	info.xEnd = axCenter + axRange
+	Getaxis/q left
+	variable ayRange = (V_max - V_min)* ((V_max - V_min)/(V_top- V_bottom))/2
+	variable ayCenter = V_bottom + (V_top - V_bottom)/2
+	info.yStart = ayCenter - ayRange
+	info.yEnd = ayCenter + ayRange
+	
+	string infoStr
+	StructPut/S info, infoStr
+	SetWindow $hostWin userData (subwinUtil) = infoStr
+	// update all the subwindows
+	variable iSubWin
+	string subWinStr
+	for (iSubWin =0; iSubWin < nSubWins; iSubWin +=1)
+		SubWinStr = hostWin + "#" + stringfromlist (iSubWin, graphList)
+		Setaxis/W=$SubWinStr bottom info.xStart, info.xEnd
+		Setaxis /W=$SubWinStr left info.yStart, info.yEnd
+	endfor
+	// adjust aspect ratio 
+	if (info.holdAspect)
+		if (info.reSizeByWidth)
+			ModifyGraph/w=$hostWin width=0, height={Plan,(((info.yEnd - info.yStart) * info.nRows)/((info.xend - info.xStart) * info.nCols)),left,bottom}
+		else
+			ModifyGraph/w=$hostWin height=0, width={Plan,(((info.xend - info.xStart) * info.nCols)/((info.yEnd - info.yStart) * info.nRows)),bottom,left}
+		endif
+	endif
+end
+
+
 //***********************************************************************************	
 // User code calls this function to make a new host graph, providing a GUIPSubWin_UtilStruct
 // containing a GUIPSubWin_ContentStruct for each subwindow to be added
-// GUIPSubWin_Display makes a new host graph, and adds subwindows with user's content,
-// by calling GUIPSubWin_Add which in turn calls the users plotting function, then
-// sets window Note for Subwindow metadata, and setshook function for resizing
 // Last Modified:
+// 2025/07/29 by Jamie Boyd - using struct for info and masterX/Y for getting Igor to maintian proper aspect ratio
 // 2016/11/15 by Jamie Bod - code to figure out size of Igor frame/monitor size
 // 2016/11/07 by Jamie Boyd - put yokedAxes info in window note
 function GUIPSubWin_Display (s)
 	STRUCT GUIPSubWin_UtilStruct &s
-	
-	//display graph in given position, with given title and name (or incremented name, if name is already used)
-	Display/N=$s.graphName/W=(s.wLeft,s.wTop, s.wRight,s.wBottom)/K=(s.killBehavior) as s.graphTitle
+	// make sure packages folder exists
+	if (!(dataFolderExists ("root:packages:GUIPsubwin")))
+		if (!(DataFolderExists ("root:packages")))
+			NewDataFolder root:packages
+		endif
+		NewDataFolder root:packages:GUIPsubwin
+		make root:packages:GUIPsubwin:masterX = {0, 0, 1, 1, 0}
+		make root:packages:GUIPsubwin:masterY = {0, 1, 1, 0, 0}
+	endif
+	WAVE masterX = root:packages:GUIPsubwin:masterX
+	WAVE masterY = root:packages:GUIPsubwin:masterY
+	//display graph with given title and name (or incremented name, if name is already used)
+	Display/N=$s.graphName/K=(s.killBehavior) masterY vs MasterX as s.graphTitle
 	// graph name may have needed to be incremented, so update graph name in struct
 	s.graphName = S_Name
+	// hide master graph traces, these are just used to define a left and right axis for mainitaining aspect ratio when resizing
+	ModifyGraph/w=$s.graphName lsize = 0
+	ModifyGraph/w=$s.graphName nticks=0
+	ModifyGraph/w=$s.graphName margin=1
 	// check for consistency in nCols and nRows
 	// if nCols and nRows are not set properly, set them to appropriate defaults
 	if (s.nSubWins > 0)
@@ -167,228 +203,295 @@ function GUIPSubWin_Display (s)
 		s.nCols =0
 		s.nRows =0
 	endif
-	// check for limiting to monitor/Igor frame
-	if ((s.maxWidth == -1) || (s.maxHeight == -1))
-		if( CmpStr(IgorInfo(2)[0,2],"Win")==0) // Application Frame on Windows
-			getwindow kwFrameInner wsize
-			s.maxWidth =( V_right - V_left)
-			s.MaxHeight = V_bottom - V_top - 40
-		else // need to do add flexibility for using more than one screen on a Mac. For now, just use bounds of biggest screen
-			variable iScreen, nScreens = numberbykey ("NSCREENS", IgorInfo (0), ":", ";")
-			s.maxHeight = 0
-			s.maxWidth = 0
-			string screenStr
-			for (iScreen = 1; iScreen <= nScreens; iScreen +=1)
-				// This is ugly. stringbykey ("SCREEN1", IgorInfo (0), ":", ";")  gives this string "DEPTH=32,RECT=0,0,1280,800" where the separator
-				// between Key/Value pairs, ",",  is same as as that between items in the RECT list. StringByKey with "RECT" would thus truncate the list to 
-				// its first element. So we replace the first "," we find with a space so that the Key/Value pair separator and the list separator are different.
-				screenStr = StringByKey ("RECT", ReplaceString(",", stringbykey ("SCREEN" + num2str (iScreen), IgorInfo (0), ":", ";"), " ", 0,1), "=", " ")
-				s.maxWidth  = max (s.maxWidth, (str2num (stringfromlist (2, screenStr, ",")) -  str2num (stringfromlist (0, screenStr, ","))))
-				s.maxHeight = max (s.maxHeight, (str2num (stringfromlist (3, screenStr, ",")) -  str2num (stringfromlist (1, screenStr, ","))))
-			endfor
-			s.maxHeight -= 40
-		endif
-	endif
-	// set window note for graph with meta-data used to fit subwindows
-	SetWindow $s.graphName note = "nCols:" + num2str (s.nCols) + ";nRows:" + num2str (s.nRows) + ";yokedAxes:" + num2str (s.yokedAxes)
-	SetWindow $s.graphName note += ";AspRat:" + num2str(s.aspectRatio) + ";maxHeight:" + num2str (s.maxHeight)
-	SetWindow $s.graphName note += ";maxWidth:" + num2str (s.maxWidth) + ";NeedsResize:1;"
-	// add subwindows and add content to each subwindow
+	// set window note for graph with meta-data used to fit subwindows if we later add or remove a subwindow
+	STRUCT GUIPSubWin_WinInfoStruct info
+	info.nCols = s.nCols
+	info.nRows = s.nRows
+	info.xStart = s.xStart
+	info.xEnd = s.xEnd
+	info.yStart = s.yStart
+	info.yEnd = s.yEnd
+	info.holdAspect = s.holdAspect
+	info.prefMoreCols = s.prefMoreCols
+	info.reSizeByWidth = s.reSizeByWidth
+	// save info in named user data for graph
+	string infoStr
+	StructPut/S info, infoStr
+	SetWindow $s.graphName userdata (subwinUtil) = infoStr
+	// add subwindows
 	if (s.nSubWins > 0)
-		GUIPSubWin_Add (s)
-	endif
-	// make sure packages folder exists, and add variable for this graph
-	if (!(dataFolderExists ("root:packages:GUIPsubwin")))
-		if (!(DataFolderExists ("root:packages")))
-			NewDataFolder root:packages
+		if (s.holdAspect)
+			// Set master aspect ratio
+			if (s.reSizeByWidth)
+				ModifyGraph/w=$s.graphName width=0, height={Plan,(((s.yEnd - s.yStart) * s.nRows)/((s.xend - s.xStart) * s.nCols)),left,bottom}
+			else
+				ModifyGraph/w=$s.graphName height=0, width={Plan,(((s.xend - s.xStart) * s.nCols)/((s.yEnd - s.yStart) * s.nRows)),bottom,left}
+			endif
+		else
+			ModifyGraph/w=$s.graphName height=0, width=0
 		endif
-		NewDataFolder root:packages:GUIPsubwin
+		// add subwindows and add content to each subwindow
+		variable xProp = 1/s.nCols, yProp = 1/s.nRows
+		variable iSubWin, iCol, iRow, xGraphStart, xgraphEnd, yGraphStart, yGraphEnd
+		STRUCT GUIPSubWin_ContentStruct cs
+		for (iSubWin =0; iSubWin < s.nSubWins; iSubWin +=1)
+			iCol = mod (iSubWin, s.nCols)
+			iRow = floor (iSubwin/s.nCols)
+			xGraphStart = iCol * xProp
+			xGraphEnd = min (0.999, (xGraphStart + xProp))  // because proportions need to be less than 1 or Igor might assume they are points
+			yGraphStart = iRow * yProp
+			ygraphEnd = min (0.999, (yGraphStart + yProp))
+			cs = s.contentStructs [iSubwin]
+			Display/N=$cs.subWin/W=(xGraphStart, yGraphStart ,xGraphEnd, ygraphEnd)/HOST=$s.graphName
+			SetActiveSubwindow $s.graphName + "#" + cs.subWin
+			cs.addContent(cs)
+		endfor
 	endif
-	variable/G $"root:packages:GUIPsubwin:" + cleanUpName (s.graphName, 0) + "_lastResize" = -1 // code for never updated
-	// set hook function to do resizing when graph is resized
-	SetWindow $s.graphName hook (resiseSubWinsHook)= GUIPSubWin_ResizeHook
+	SetActiveSubwindow ##
+	NewPanel/HOST=#/EXT=3/W=(0,50,400,0)  as "Controls"
+	PopupMenu arrangePopup, pos={21.00,10.00},size={199.00,20.00},proc=GUIPSubWin_ArrangePopMenuProc
+	PopupMenu arrangePopup,title="Arrrange ",fSize=12
+	PopupMenu arrangePopup,mode=1,popvalue="1 Column x 3 Rows",value=#"GUIPSubWin_ListArrangments()"
+	RenameWindow #,controlPanel
+	SetActiveSubwindow ##
 end
 
+
+// *********************************************************************************************
+// adds a subwindow to an existig graph
+// last modified 2027/07/29 by Jamie Boyd
+function GUIPSubWin_Add (cs)
+	STRUCT GUIPSubWin_ContentStruct &cs
+	// get named user data
+	STRUCT GUIPSubWin_WinInfoStruct info
+	StructGet/S info, GetUserData (cs.graphName, "", "subwinUtil")
+	// list of subwindows, minus control panel
+	string prevSubWins = RemoveFromList("controlPanel", childwindowList (cs.graphName), ";", 0)
+	variable nSubwins = ItemsinList (prevSubWins)
+	variable xGraphStart, xGraphEnd, yGraphStart, yGraphEnd
+
+	
+	if (whichListItem (cs.subWin, prevSubWins, ";", 0,0) > -1)
+		print "Subwindow with the name \"" + cs.subWin + "\" already exists."
+		getwindow $cs.graphName gsizeDC
+		variable hostXsize = (V_Right - V_Left), hostYSize = (V_Bottom - V_Top)
+		getwindow $cs.graphName + "#" + cs.subWin gsizeDC
+		xGraphStart = V_Left/hostXsize
+		xGraphEnd = min (0.999, V_Right/hostXsize)
+		yGraphEnd = V_Bottom/hostYSize
+		yGraphStart = min (0.999, V_Top/hostYSize)
+		killWindow $cs.graphName + "#" + cs.subWin
+		Display/N=$cs.subWin/W=(xGraphStart, yGraphStart ,xGraphEnd, ygraphEnd)/HOST=$cs.graphName
+		SetActiveSubwindow $cs.graphName + "#" + cs.subWin
+		cs.addContent(cs)
+		SetAxis /W= $cs.graphName + "#" + cs.subWin bottom info.xStart, info.xEnd
+		SetAxis /W= $cs.graphName + "#" + cs.subWin left info.yStart, info.yEnd
+	else // figure out subwindow position
+		variable xProp = 1/info.nCols, yProp = 1/info.nRows
+		variable iSubWin, iCol, iRow
+		variable colPos, rowPos
+		if (nSubwins < (info.nRows * info.nCols))
+			iCol = mod (nSubwins, info.nCols)
+			iRow = floor (nSubwins/info.nCols)
+			xGraphStart = iCol * xProp
+			xGraphEnd = min (0.999, (xGraphStart + xProp))  // because proportions need to be less than 1 or Igor might assume they are points
+			yGraphStart = iRow * yProp
+			ygraphEnd = min (0.999, (yGraphStart + yProp))
+			Display/N=$cs.subWin/W=(xGraphStart, yGraphStart ,xGraphEnd, ygraphEnd)/HOST=$cs.graphName
+			SetActiveSubwindow $cs.graphName + "#" + cs.subWin
+			cs.addContent(cs)
+			SetAxis /W= $cs.graphName + "#" + cs.subWin bottom info.xStart, info.xEnd
+			SetAxis /W= $cs.graphName + "#" + cs.subWin left info.yStart, info.yEnd
+		else  // not enough room in matrix of rows and columns, add a row or column
+			if (info.prefMoreCols)
+				info.nCols += 1
+				xProp = 1/info.nCols
+			else
+				info.nRows += 1
+				yProp = 1/info.nRows
+			endif
+			string infoStr
+			StructPut/S info, infoStr
+			SetWindow $cs.graphName userdata (subwinUtil) = infoStr
+			//
+			if (info.holdAspect)
+				if (info.reSizeByWidth)
+					ModifyGraph/w=$cs.graphName width=0, height={Plan,(((info.yEnd - info.yStart) * info.nRows)/((info.xend - info.xStart) * info.nCols)),left,bottom}
+				else
+					ModifyGraph/w=$cs.graphName height=0, width={Plan,(((info.xend - info.xStart) * info.nCols)/((info.yEnd - info.yStart) * info.nRows)),bottom,left}
+				endif
+			endif
+			// reposition  previous subwindows
+			for (iSubWin =0; iSubWin < nSubWins; iSubWin +=1)
+				iCol = mod (iSubWin, info.nCols)
+				iRow = floor (iSubwin/info.nCols)
+				xGraphStart = iCol * xProp
+				xGraphEnd = min (0.999, (xGraphStart + xProp))  // because proportions need to be less than 1 or Igor might assume they are points
+				yGraphStart = iRow * yProp
+				ygraphEnd = min (0.999, (yGraphStart + yProp))
+				MoveSubWindow /w=$cs.graphName + "#" +stringfromList (iSubWin, prevSubWins, ";"), fnum=(xGraphStart,yGraphStart, xGraphEnd, ygraphEnd)
+			endfor
+			// add new subwindow at end
+			iCol = mod (iSubWin, info.nCols)
+			iRow = floor (iSubwin/info.nCols)
+			xGraphStart = iCol * xProp
+			xGraphEnd = min (0.999, (xGraphStart + xProp))  // because proportions need to be less than 1 or Igor might assume they are points
+			yGraphStart = iRow * yProp
+			ygraphEnd = min (0.999, (yGraphStart + yProp))
+			Display/N=$cs.subWin/W=(xGraphStart, yGraphStart ,xGraphEnd, ygraphEnd)/HOST=$cs.graphName
+			SetActiveSubwindow $cs.graphName + "#" + cs.subWin
+			cs.addContent(cs)
+			SetAxis /W= $cs.graphName + "#" + cs.subWin bottom info.xStart, info.xEnd
+			SetAxis /W= $cs.graphName + "#" + cs.subWin left info.yStart, info.yEnd
+		endif
+	endif
+end
+
+
 //***********************************************************************************	
-// Adds subwindows to an existing graph.
-// Last Modified:
-// 2016/11/14 by Jamie Boyd fixed problems with adding subwins to empty graphs
-function GUIPSubWin_Add (s)
-	STRUCT GUIPSubWin_UtilStruct &s
+// Removes a subwindow from an existing graph.
+// Last Modified 2027/07/29 by Jamie Boyd
+function GUIPSubWin_Remove (graphName, subWin)
+	string graphName
+	string subWin
 	
 	// how many subwindows do we already have?
-	string graphList = ChildWindowList(s.graphName)
-	variable prevSubWins = itemsinlist (graphList, ";")
-	// If scaling is to be same for all subwins, find out current axes ranges to apply to added subwindows
-	// assume first subwindow has same scaling as all the rest
-	variable Bmin, Bmax, Lmin, Lmax
-	if ((s.yokedAxes) && (prevSubWins > 0))
-		string SubWinStr = s.graphName +  "#" +  stringfromlist (0, graphList)
+	string graphList = removefromlist ("controlPanel", ChildWindowList(graphName), ";", 0)
+	variable nSubwins = itemsinlist (graphList, ";")
+	if (whichListItem (subWin, graphList, ";", 0, 0) == -1)
+		print "Subwindow with the name \"" + subWin + "\" does not exist."
+		return 1
+	endif
+	killWindow $graphName + "#" + subWin
+	graphList = removeFromList(subWin, graphList, ";")
+	nSubwins -= 1
+	STRUCT GUIPSubWin_WinInfoStruct info
+	StructGet/S info, GetUserData (graphName, "", "subwinUtil")
+	
+	variable matrixChanged =0
+	if (info.prefMoreCols)
+		if (nSubwins <= (info.nCols-1) * info.nRows)
+			info.nCols -= 1
+			matrixChanged = 1
+		endif
+		if (nSubwins <= (info.nCols * (info.nRows-1)))
+			info.nRows -=1
+			matrixChanged = 1
+		endif
+	else
+		if (nSubwins <= (info.nCols * (info.nRows -1)))
+			info.nRows -= 1
+			matrixChanged = 1
+		endif
+		if (nSubwins <= ((info.nCols-1) * info.nRows))
+			info.nCols -= 1
+			matrixChanged =1
+		endif
+	endif
+	if (matrixChanged)
+		if (info.holdAspect)
+			if (info.reSizeByWidth)
+				ModifyGraph/w=$graphName width=0, height={Plan,(((info.yEnd - info.yStart) * info.nRows)/((info.xend - info.xStart) * info.nCols)),left,bottom}
+			else
+				ModifyGraph/w=$graphName height=0, width={Plan,(((info.xend - info.xStart) * info.nCols)/((info.yEnd - info.yStart) * info.nRows)),bottom,left}
+			endif
+		endif
+		string infoStr
+		StructPut/S info, infoStr
+		SetWindow $graphName userdata (subwinUtil) = infoStr
+	endif
+	variable xProp = 1/info.nCols
+	variable yProp = 1/info.nRows
+	variable iSubWin, iCol, iRow
+	variable xGraphStart, xGraphEnd, yGraphStart, ygraphEnd
+	// reposition remaining subwindows
+	for (iSubWin =0; iSubWin < nSubWins; iSubWin +=1)
+		iCol = mod (iSubWin, info.nCols)
+		iRow = floor (iSubwin/info.nCols)
+		xGraphStart = iCol * xProp
+		xGraphEnd = min (0.999, (xGraphStart + xProp))  // because proportions need to be less than 1 or Igor might assume they are points
+		yGraphStart = iRow * yProp
+		ygraphEnd = min (0.999, (yGraphStart + yProp))
+		MoveSubWindow /w=$graphName + "#" +stringfromList (iSubWin, graphList, ";"), fnum=(xGraphStart,yGraphStart, xGraphEnd, ygraphEnd)
+	endfor
+End
+	
+//***********************************************************************************	
+// Set Left and Right Axes to full scale for all graph subwindows
+// sets min/max of each graph subwindow to min/max of all graphs
+// Last Modified 2027/07/29 by Jamie Boyd
+Function GUIPSubWin_FullScale(theGraph)
+	string theGraph
+	// how many subwindows do we have?
+	string graphList = removefromlist ("controlPanel", ChildWindowList(theGraph), ";", 0)
+	variable nSubwins = itemsinlist (graphList, ";")
+	
+	STRUCT GUIPSubWin_WinInfoStruct info
+	StructGet/S info, GetUserData (theGraph, "", "subwinUtil")
+
+	variable iGraph, nGraphs = itemsinlist (graphList, ";")
+	string subWinStr
+	//Find global mins and maxs across all the subwindows
+	info.xStart = INF; info.xEnd = -INF;info.yStart = INF; info.yEnd = -INF 
+	for (iGraph =0; iGraph < nGraphs; iGraph+=1)
+		SubWinStr = theGraph +  "#" +  stringfromlist (iGraph, graphList)
+		Setaxis/W= $SubWinStr /A left
+		Setaxis/W= $SubWinStr /A bottom
 		DoUpdate/W=$SubWinStr
 		Getaxis/Q/W= $SubWinStr bottom
-		Bmin = V_min
-		Bmax = V_max
+		info.xStart = min (V_min, info.xStart)
+		info.xEnd = max (V_max, info.xEnd)
 		Getaxis/Q/W= $SubWinStr left
-		Lmin = V_min
-		Lmax = V_Max	
-	endif
-	// iterate through subwindows
-	variable iSub
-	for (iSub =0; iSub < s.nSubWins; iSub +=1)
-		if (whichListItem (s.contentStructs [iSub].subWin, graphList, ";") > -1)
-			print "Subwindow with the name \"" + s.contentStructs [iSub].subWin + "\" already exists."
-			continue
+		info.yStart = min (V_min, info.yStart)
+		info.yEnd = max (V_max, info.yEnd)
+	endfor
+	string infoStr
+	StructPut/S info, infoStr
+	SetWindow $theGraph userdata (subwinUtil) = infoStr
+	for (iGraph =0; iGraph < nGraphs; iGraph+=1)
+		SubWinStr = theGraph +  "#" +  stringfromlist (iGraph, graphList)
+		Setaxis/W=$SubWinStr bottom info.xStart, info.xEnd
+		Setaxis /W=$SubWinStr left info.yStart, info.yEnd
+	endfor
+	// adjust aspect ratio 
+	if (info.holdAspect)
+		if (info.reSizeByWidth)
+			ModifyGraph/w=$theGraph width=0, height={Plan,(((info.yEnd - info.yStart) * info.nRows)/((info.xend - info.xStart) * info.nCols)),left,bottom}
+		else
+			ModifyGraph/w=$theGraph height=0, width={Plan,(((info.xend - info.xStart) * info.nCols)/((info.yEnd - info.yStart) * info.nRows)),bottom,left}
 		endif
-		Display/N=$s.contentStructs[iSub].subWin/W=(0 ,0,1,1)/HOST=$s.graphName
-		// tell user function the subwindow number
-		s.contentStructs [iSub].iSubWin =prevSubWins +  iSub
-		// run the user's function to add content
-		SetActiveSubwindow $s.graphName + "#" + s.contentStructs[iSub].subWin
-		s.addContent(s.contentStructs [iSub])
-		if ((s.yokedAxes) && (prevSubWins > 0))// set axis to match current axes
-			setaxis bottom, BMin, BMax
-			setaxis left, Lmin, LMax
-		endif
-		// set margins
-		modifygraph margin (left) = s.marginL, margin (top) = s.marginT, margin (right) = s.marginR, margin (bottom) = s.marginB
-	endfor	
-	// possibly change window title
-	if (cmpstr (s.graphTitle, "") != 0)
-		DoWindow /T$ s.graphName, s.graphTitle
 	endif
-	// change window note, adding the window may have changed the arrangement
-	Getwindow $s.graphName note
-	s.nSubWins = itemsinList (ChildWindowList(s.graphName), ";")
-	variable nCols, nRows
-	if ((s.nCols > 0) && (s.nRows > 0))
-		nCols = s.nCols
-		nRows = s.nRows
+	return 0
+End
+
+
+Function GUIPSubWin_setGrowMode (GraphName, growMode)
+	String GraphName
+	variable growMode
+	
+	
+	STRUCT GUIPSubWin_WinInfoStruct info
+	StructGet/S info, GetUserData (GraphName, "", "subwinUtil")
+	if (growMode < 0)
+		info.holdAspect =0
+		ModifyGraph/w=$GraphName width=0, height=0
 	else
-		nCols = NumberByKey("nCols", S_Value, ":", ";")
-		nRows = NumberByKey("nRows", S_Value, ":", ";")
-	endif
-	// If not enough rows and colmns, add another row, then another column, etc, till rows X cols is big enough
-	if (nRows * nCols <   s.nSubWins)
-		variable addCol =s.prefMoreCols
-		do
-			if (addCol == 0)
-				nRows += 1
-				addCol =1
-			else
-				nCols += 1
-				addCol =0
-			endif
-		while (nCols * nRows <   s.nSubWins)
-	endif
-	s.nRows = nRows
-	s.nCols = nCols
-	S_Value = ReplaceNumberByKey("nCols", S_Value, s.nCols, ":", ";")
-	S_Value = ReplaceNumberByKey("nRows", S_Value, s.nRows, ":", ";")
-	// if new setting for aspect ratio is given, update info in window note
-	if (numtype (s.aspectRatio) == 0)
-		S_Value = ReplaceNumberByKey("AspRat", S_Value, s.aspectRatio, ":", ";")
-	endif
-	if ((s.maxHeight > 0) && (s.maxWidth > 0))
-		S_Value = ReplaceNumberByKey("maxHeight", S_Value, s.maxHeight, ":", ";")
-		S_Value = ReplaceNumberByKey("maxWidth", S_Value, s.maxWidth, ":", ";")
-	endif
-	SetWindow $s.graphName note = S_Value
-	// do a resize
-	if (prevSubWins == 0)
-		// Set full scale if no previous content
-		GUIPSubWin_FullScale(s.graphName)
-	else
-		GUIPSubWin_FitSubWindows (s.graphName )
-	endif
-	// Update popMenu, if it exists
-	controlinfo/W=$s.graphName GUIPSubWin_PopMenu
-	if (V_Flag != 0)
-		if (s.nSubWins == 0)
-			popupmenu GUIPSubWin_PopMenu win=$s.graphName, mode = 1
-		else	
-			string arrangeList =  GUIPSubWin_ListArrangments()
-			string arrangeStr = num2str (nCols) +  SelectString((nCols==1) , " Columns x ", " Column x ")+ num2str (nRows) + SelectString ((nRows ==1),  " Rows", " Row")
-			variable theItem = whichlistItem (arrangestr,arrangeList, ";")
-			if (theItem > -1)
-				popupmenu GUIPSubWin_PopMenu mode = 1 + whichlistItem (arrangestr, GUIPSubWin_ListArrangments())
-			endif
+		info.holdAspect =1
+		info.reSizeByWidth = (growMode > 0)
+		if (info.reSizeByWidth)
+			ModifyGraph/w=$GraphName width=0, height={Plan,(((info.yEnd - info.yStart) * info.nRows)/((info.xend - info.xStart) * info.nCols)),left,bottom}
+		else
+			ModifyGraph/w=$GraphName height=0, width={Plan,(((info.xend - info.xStart) * info.nCols)/((info.yEnd - info.yStart) * info.nRows)),bottom,left}
 		endif
 	endif
+	string infoStr
+	structPut/S info, infoStr
+	SetWindow SubWinDemoGraph userdata (subwinUtil) = infoStr
+	
 end
 
-//***********************************************************************************	
-// Removes subwindows from an existing graph.
-// Last Modified May 10 2010 by Jamie Boyd
-function GUIPSubWin_Remove (s)
-	STRUCT GUIPSubWin_UtilStruct &s
-	
-	// how many subwindows do we already have?
-	string graphList = ChildWindowList(s.graphName)
-	variable prevSubWins = itemsinlist (graphList, ";")
-	// iterate through requested subwindows, killing them
-	variable iSub
-	for (iSub =0; iSub < s.nSubWins; iSub +=1)
-		if (whichListItem (s.contentStructs [iSub].subWin, graphList, ";") == -1)
-			print "Subwindow with the name \"" + s.contentStructs [iSub].subWin + "\" does not exist."
-			continue
-		endif
-		killWindow $s.graphName + "#" + s.contentStructs [iSub].subWin
-	endfor
-	// do we need to adjust column and row numbers?
-	// change window note, adding the window may have changed the arrangement
-	Getwindow $s.graphName note
-	s.nSubWins = itemsinList (ChildWindowList(s.graphName), ";")
-	if (s.nSubWins > 0)
-		variable nCols, nRows
-		if ((s.nCols >0) && (s.nRows > 0))
-			nCols = s.nCols
-			nRows = s.nRows
-		else
-			nCols = NumberByKey("nCols", S_Value, ":", ";")
-			nRows = NumberByKey("nRows", S_Value, ":", ";")
-		endif
-		for(;(nRows * (nCols -1) >=   s.nSubWins) || (((nRows-1) * nCols) >=  s.nSubWins);)
-			if (s.prefMoreCols)
-				if (((nRows-1) * nCols) >= s.nSubWins)
-					nRows -=1
-				endif
-		
-				if (nRows * (nCols -1) >= s.nSubWins)
-					nCols-=1
-				endif
-			else
-				if (nRows * (nCols -1) >= s.nSubWins)
-					nCols-=1
-				endif
-				if (((nRows-1) * nCols) >= s.nSubWins)
-					nRows -=1
-				endif
-			endif
-		endfor
-		s.nRows = nRows
-		s.nCols = nCols
-		S_Value = ReplaceNumberByKey("nCols", S_Value, s.nCols, ":", ";")
-		S_Value = ReplaceNumberByKey("nRows", S_Value, s.nRows, ":", ";")
-		SetWindow $s.graphName note = S_Value
-	endif
-	// Update popMenu, if it exists
-	controlinfo/w=$s.graphName GUIPSubWin_PopMenu
-	if (V_Flag != 0)
-		if (s.nSubWins == 0)
-			popupmenu GUIPSubWin_PopMenu win=$s.graphName, mode = 1
-		else	
-			string arrangeStr = num2str (nCols) +  SelectString((nCols==1) , " Columns x ", " Column x ")+ num2str (nRows) + SelectString ((nRows ==1),  " Rows", " Row")
-			variable theItem = whichlistItem (arrangestr, GUIPSubWin_ListArrangments())
-			if (theItem > -1)
-				popupmenu GUIPSubWin_PopMenu win=$s.graphName, mode = 1 + whichlistItem (arrangestr, GUIPSubWin_ListArrangments())
-			endif
-		endif
-	endif
-	// do a resize
-	if (s.nSubWins > 0)
-		GUIPSubWin_FitSubWindows (s.graphName)
-	endif
-end
+
+
 
 //***********************************************************************************	
 // a button procedure to set Left and Right Axes to full scale for all graph subwindows in the top window
@@ -407,226 +510,6 @@ Function GUIPSubWin_FullScaleButtonProc(ba) : ButtonControl
 	return 0
 End
 
-//***********************************************************************************	
-// Set Left and Right Axes to full scale for all graph subwindows
-// if scaling is "Yoked" set min/max of each graph subwindow to min/max of all graphs
-// else set min/max for each graph subwindow separately
-// Last Modified:
-// 2016/11/07 by Jamie Boyd - yoked Scaling info now in window Note
-Function GUIPSubWin_FullScale(theGraph)
-	string theGraph
-	
-	if (strsearch(theGraph, "#", 0) > -1)
-		theGraph = stringFromList (0, theGraph, "#")
-	endif
-	Getwindow $theGraph note
-	variable yokedAxes = NumberByKey("yokedAxes", S_Value, ":", ";")
-	
-	string graphList = ChildWindowList(theGraph)
-	if (cmpstr (graphList, "") == 0)
-		return 1
-	endif
-	
-	variable iGraph, nGraphs = itemsinlist (graphList, ";"), xMin = INF, xMax = -INF, yMin = INF, yMax = -INF
-	string subWinStr
-	//Find global mins and maxs across all the subwindows
-	for (iGraph =0; iGraph < nGraphs; iGraph+=1)
-		SubWinStr = theGraph +  "#" +  stringfromlist (iGraph, graphList)
-		Setaxis/W= $SubWinStr /A left
-		Setaxis/W= $SubWinStr /A bottom
-		DoUpdate/W=$SubWinStr
-		if (yokedAxes)
-			Getaxis/Q/W= $SubWinStr bottom
-			xMin = min (V_min, xMin)
-			xMax = max (V_max, xmax)
-			Getaxis/Q/W= $SubWinStr left
-			yMin = min (V_min, yMin)
-			yMax = max (V_max, ymax)
-		endif
-	endfor
-	if (yokedAxes)
-		for (iGraph =0; iGraph < nGraphs; iGraph += 1)
-			SubWinStr = theGraph +  "#" +  stringfromlist (iGraph, graphList)
-			Setaxis/W= $SubWinStr bottom, xMin, xMax
-			Setaxis/W= $SubWinStr left, yMin, yMax
-		endfor
-	endif
-	GUIPSubWin_FitSubWindows (theGraph)
-	return 0
-End
-
-//***********************************************************************************	
-// a Hook function that fires when a graph window has just been resized/modified
-// initially sets a background task that calls ImageFitSubwindows when user is done resizing the graph
-// then resets the global variable for time of last call to resize
-// Last modified:
-// 2016/11/17 by Jamie Boyd - modified global variable for each graph
-Function GUIPSubWin_ResizeHook(s)
-	STRUCT WMWinHookStruct &s
-	
-	if (s.eventCode == 6)
-		string theGraph = s.winName
-		if (strsearch(theGraph, "#", 0) > -1)
-			theGraph = stringFromList (0, theGraph, "#")
-		endif
-		Getwindow $theGraph note
-		NVAR lastResize =  $"root:packages:GUIPsubwin:" + cleanUpName (s.winName, 0) + "_lastResize"
-		if (lastResize == -1)
-			S_Value = ReplaceNumberByKey("NeedsResize", S_Value, 1, ":", ";") 
-			SetWindow $theGraph note = S_Value
-			// the background task is named for the window, so we can get the window name from within the task
-			CtrlNamedBackground $theGraph, period = 10, proc= GUIPSubWin_RefitBKG, start
-		endif
-		lastResize = ticks
-	endif
-	return 0		// 0 if nothing done, else 1
-End
-
-//***********************************************************************************	
-// This is the function that will be called periodically to see if the last resize event was
-// more than 20 ticks ago, and calls ImageFitSubwindows and exits if that is the case
-// Last modified:
-// 2016/11/17 by Jamie Boyd - improved handling of gloval variable for the graph
-Function GUIPSubWin_RefitBKG(s)
-	STRUCT WMBackgroundStruct &s
-	
-	NVAR lastResize =  $"root:packages:GUIPsubwin:" + cleanUpName (s.name, 0) + "_lastResize"
-	if ((lastResize > 0) && (s.curRunticks > lastResize + 20))
-		Getwindow $s.name note
-		if (NumberByKey("NeedsResize", S_Value, ":", ";") == 1)
-			GUIPSubWin_FitSubWindows (s.name)
-		endif
-		lastResize = -1
-		return 1
-	endif
-	return 0
-end
-
-//***********************************************************************************	
-//Resizes the subwindows in a graph, assuming they should all be the same size and with same aspect ratio and neatly arranged in a grid.
-// Get size of the graph, figure out the matrix, resize and move subwindows to best fill space, resize the graph window on the slack dimension
-// Last modified:
-// 2016/11/07 by Jamie Boyd - 
-Function GUIPSubWin_FitSubWindows (theGraph)
-	string theGraph
-	
-	DoUpdate /w= $theGraph
-	// control bar heights and panel measures are in pixels wheras graph wsize is in points
-	// on MacOS pixels and points are the same (72 per inch) but can vary on windows
-	variable winFudge = (ScreenResolution/72) 
-	// read info from window note
-	Getwindow $theGraph note
-	variable nCols = numberbykey ("nCols",  S_Value, ":",";")
-	variable nRows =numberbykey ("nRows",  S_Value, ":",";")
-	variable AspectRatio = numberbykey ("AspRat",  S_Value, ":",";") // vertical scaling/ horizontal sclaing
-	variable maxWidth = numberbykey ("maxWidth",  S_Value, ":",";")
-	variable maxHeight = numberbykey ("maxHeight",  S_Value, ":",";")
-	variable yokedAxes = NumberByKey("yokedAxes", S_Value, ":", ";")
-	// set NeedsResize code to 0 to prevent update recursion from hook function
-	S_Value = ReplaceNumberByKey("NeedsResize", S_Value, 0, ":", ";")
-	SetWindow $theGraph note = S_Value
-	//get list of subwindows
-	string graphList = ChildWindowList(theGraph)
-	variable iGraph, nGraphs = itemsinList (graphList, ";")
-	if (nGraphs == 0)
-		return 1
-	endif
-	//get size of the main graph window - account for controlBar on top of graph
-	GetWindow $theGraph wsize
-	ControlInfo /W=$theGraph kwControlBar // maybe expand this to exclude control bars on other sides of graph
-	variable sL = V_left
-	variable sT = V_top + V_height/winFudge
-	variable sR =  V_right
-	variable sB = V_bottom
-	// calculate main graph height and width
-	variable graphHeight, graphWidth, maxSubGraphWidth, maxSubGraphHeight
-	graphHeight = sB -sT
-	graphWidth = sR - sL
-	if (maxWidth == 0)
-		maxSubGraphWidth = INF
-	else
-		maxSubGraphWidth = maxWidth/nCols
-	endif
-	if (maxHeight ==0)
-		maxSubGraphHeight = INF
-	else
-		maxSubGraphHeight = maxHeight/nRows
-	endif
-	variable bottomRange, leftRange, newSubGraphWidth, newSubGraphHeight
-	variable newSubGraphWidthByWidth, newSubGraphHeightByWidth, byWidthProp
-	variable newSubGraphWidthByHeight, newSubGraphHeightByHeight, byHeightProp
-	if (AspectRatio == 0) // ignoring aspect ratio, apportion space regardless of relative range of left and bottom axes
-		newSubGraphWidth = min (graphWidth/nCols, maxSubGraphWidth)
-		newSubGraphHeight = min (graphHeight/nRows, maxSubGraphHeight)
-	else //get axes ranges and margins of the first subwindow - assume all subwindows have the same ranges and margins
-		GetAxis/w= $theGraph + "#" + stringfromList (0, graphList)/q bottom
-		bottomRange= abs ((V_max - V_min))
-		GetAxis/w= $theGraph + "#" + stringfromList (0, graphList)/q left
-		leftRange= abs ((V_max - V_min))
-		// Get margins - similar ugly way to use stringbykey as used for IgorInfo above. If getting margins fails, use 28 as an average value
-		string marginStr= ReplaceString(" ", WinRecreation(theGraph + "#" + stringfromList (0, graphList), 0), ",")
-		marginStr = ReplaceString("\r", marginStr, ",")
-		variable lostBottom = NumberByKey("margin(left)", marginStr, "=", ",") + NumberByKey("margin(right)", marginStr, "=", ",")
-		variable lostLeft= NumberByKey("margin(top)", marginStr, "=", ",") + NumberByKey("margin(bottom)", marginStr, "=", ",")
-		lostLeft = numtype (lostLeft) == 0 ? lostLeft : 28
-		lostBottom = numtype (lostBottom) == 0 ? lostBottom : 28
-		// Calculate new subgraph size when keeping current graph width and adjusting height
-		newSubGraphWidthByWidth =  min (graphWidth/nCols, maxSubGraphWidth)
-		newSubGraphHeightByWidth = (AspectRatio * (newSubGraphWidthByWidth -lostBottom) * (leftRange/bottomRange)) + lostLeft
-		// calculate new subgraph size when keeping current graph height and adjusting width
-		newSubGraphHeightByHeight =  min (graphHeight/nRows, maxSubGraphHeight)
-		newSubGraphWidthByHeight = ((1/AspectRatio) * (newSubGraphHeightByHeight - lostLeft) * (bottomRange/leftRange)) + lostBottom
-		if (newSubGraphHeightByWidth < maxSubGraphHeight)
-			if (newSubGraphWidthByHeight < maxSubGraphWidth)
-				// take whichever of byWidth or byHeight maximizes area
-				if (newSubGraphWidthByWidth * newSubGraphHeightByWidth > newSubGraphWidthByHeight * newSubGraphHeightByHeight)
-					newSubGraphWidth = newSubGraphWidthByWidth
-					newSubGraphHeight = newSubGraphHeightByWidth
-				else
-					newSubGraphWidth = newSubGraphWidthByHeight
-					newSubGraphHeight = newSubGraphHeightByHeight
-				endif
-			else //
-				newSubGraphWidth = newSubGraphWidthByWidth
-				newSubGraphHeight = newSubGraphHeightByWidth
-			endif
-		else
-			newSubGraphWidth = newSubGraphWidthByHeight
-			newSubGraphHeight = newSubGraphHeightByHeight
-		endif
-	endif	
-	// Move graph window to new position. Leave left and top as previous, calculate new right and
-	// bottom based on size and number of subwindows
-	sR =  sL + max (newSubGraphWidth * nCols, GUIPSubWin_GetRightMostControl (theGraph))
-	sB =  sT  + newSubGraphHeight * nRows
-	movewindow/W = $theGraph V_Left, V_top, sR, sB
-	// move each subwindow within the graoh to its new position
-	for (iGraph = 0; iGraph < nGraphs; iGraph += 1)
-		sL = mod (iGraph, nCols)* newSubGraphWidth
-		sR = sL + newSubGraphWidth
-		sT =  floor (iGraph/nCols) * newSubGraphHeight 
-		sB = sT + newSubGraphHeight
-		MoveSubWindow /w=$theGraph + "#" +stringfromList (iGraph, graphList, ";"), fnum=(sL,sT, sR, sB);
-	endfor
-end
-
-
-//*************************************************************************************************
-//returns the minumum x Size of the graph needed to show the controls, assuming they are all in the top control bar
-// Last Modified May 06 2010 by Jamie Boyd
-Function GUIPSubWin_GetRightMostControl (theGraph)
-	string theGraph
-	
-	variable lastX = 0
-	string controlList = ControlNameList(theGraph , ";")
-	variable ii, nControls = itemsinlist (controlList, ";")
-	for (ii =0; ii < nControls; ii += 1)
-		controlinfo $stringFromlist (ii, controlList, ";")
-		lastX = max (lastX,(V_left + V_Width))
-	endfor
-	return (lastX + 5) /(ScreenResolution/72)
-end
-
 //*************************************************************************************************
 //returns a list of possible arrangements of subwindows based on the number of subwindows
 // Last Modified:
@@ -634,7 +517,7 @@ end
 Function/S  GUIPSubWin_ListArrangments ()
 	
 	string arrangeStr = ""
-	variable nSubWIns = itemsinlist(childwindowList (""), ";")
+	variable nSubWins = itemsinlist (RemoveFromList("controlPanel", childwindowList (""), ";", 0), ";")
 	if (nSubWins == 0)
 		arrangeStr = "\\M1(No subWindows."
 	elseif (nSubWins == 1)
@@ -652,7 +535,7 @@ Function/S  GUIPSubWin_ListArrangments ()
 			iCols = ceil (nSubWIns/iRows)
 			addStr= num2str (iCols) + SelectString((iCols == 1) , " Columns",  " Column") + " x "
 			addStr += num2str (iRows) + SelectString((iRows == 1) , " Rows", " Row")
-			if (WhichListItem(addStr, arrangeStr, ";") ==-1)
+			if (WhichListItem(addStr, arrangeStr, ";", 0, 0) ==-1)
 				arrangeStr += addStr + ";"
 			endif	
 		endfor
@@ -668,16 +551,41 @@ Function GUIPSubWin_ArrangePopMenuProc(pa) : PopupMenuControl
 
 	switch( pa.eventCode )
 		case 2: // mouse up
-			Getwindow $pa.win note
 			// parse popstr to get chosen columns
-			variable arrangeCols = str2num (stringfromlist (0, pa.popStr, "x"))
-			variable arrangeRows = str2num (stringfromlist (1, pa.popStr, "x"))
-			// update info in WIndowNote
-			S_Value = ReplaceNumberByKey("nCols", S_Value, arrangeCols, ":", ";")
-			S_Value = ReplaceNumberByKey("nRows", S_Value, arrangeRows, ":", ";")
-			SetWindow $pa.win note = S_Value
-			// reposition subwindows
-			GUIPSubWin_FitSubWindows (pa.win)
+			string graphName = stringfromlist (0, pa.win, "#")
+			STRUCT GUIPSubWin_WinInfoStruct info
+			StructGet/S info, GetUserData (graphName, "", "subwinUtil")
+			info.nRows = str2num (stringfromlist (1, pa.popStr, "x"))
+			info.nCols = str2num (stringfromlist (0, pa.popStr, "x"))
+
+			string infoStr
+			StructPut/S info, infoStr
+			SetWindow $graphName userdata (subwinUtil) = infoStr
+
+			variable xProp = 1/info.nCols
+			variable yProp = 1/info.nRows
+			variable iSubWin, iCol, iRow
+			variable xGraphStart, xGraphEnd, yGraphStart, ygraphEnd
+			string graphList = RemoveFromList ("controlPanel", ChildWindowList(graphName), ";", 0)
+			variable nSubwins = itemsinlist (graphList, ";")
+			// reposition remaining subwindows
+			for (iSubWin =0; iSubWin < nSubWins; iSubWin +=1)
+				iCol = mod (iSubWin, info.nCols)
+				iRow = floor (iSubwin/info.nCols)
+				xGraphStart = iCol * xProp
+				xGraphEnd = min (0.999, (xGraphStart + xProp))  // because proportions need to be less than 1 or Igor might assume they are points
+				yGraphStart = iRow * yProp
+				ygraphEnd = min (0.999, (yGraphStart + yProp))
+				MoveSubWindow /w=$graphName + "#" +stringfromList (iSubWin, graphList, ";"), fnum=(xGraphStart,yGraphStart, xGraphEnd, ygraphEnd)
+			endfor
+			if (info.holdAspect)
+				if (info.reSizeByWidth)
+					ModifyGraph/w=$graphName width=0, height={Plan,(((info.yEnd - info.yStart) * info.nRows)/((info.xend - info.xStart) * info.nCols)),left,bottom}
+				else
+					ModifyGraph/w=$graphName height=0, width={Plan,(((info.xend - info.xStart) * info.nCols)/((info.yEnd - info.yStart) * info.nRows)),bottom,left}
+				endif
+			endif
+
 			break
 	endswitch
 	return 0
@@ -695,45 +603,44 @@ function GUIPSubWin_demoDisplaySubWins ()
 	s.graphName = "SubWinDemoGraph"
 	s.graphTitle  = "SubWindows are Fun"
 	s.killBehavior = 1
-	s.nSubWins = 4
+	s.nSubWins = 3
 	s.nRows = 2
 	s.nCols =2
-	s.wLeft = 20
-	s.wTop = 50
-	s.wRight =800
-	s.wBottom = 600
-	s.prefMoreCols = 0
-	s.maxWidth = -1 // limit sizes to display/application frame sizes
-	s.maxHeight = -1
-	s.aspectRatio = 0.5 // width to height scaling ratio
-	s.yokedAxes = 1
-	s.marginL  = 28
-	s.marginT = 7
-	s.marginR = 7
-	s.marginB = 28
-	funcref GUIPSubWin_AddProto s.addContent = GUIPSubWin_demoDisplaySubWin
+	s.prefMoreCols = 1
+	s.reSizeByWidth = 1
+	s.holdAspect=1
+	s.xStart = 0
+	s.xEnd = 20e-05
+	s.yStart = 0
+	s.yend = 20e-5
 	// constant cs values
-	cs.nUserWaves =2
+	cs.graphName = "SubWinDemoGraph"
+	funcref GUIPSubWin_AddProto cs.addContent = GUIPSubWin_demoDisplaySubWin
+	cs.nUserWaves = 3
+	make/o $"root:testSubWin_y"  = {6e-05, 14e-05, 14e-05, 6e-05, 6e-05}
+	WAVE cs.userWaves [1] = $"root:testSubWin_y"
+	make/o $"root:testSubWin_x"  = {6e-05, 6e-05, 14e-05, 14e-05, 6e-05}
+	WAVE cs.userWaves [2] = $"root:testSubWin_x" 
+	variable yEnd	
 	variable iSubwin
-	for (iSubwin =0; iSubWin < 4; iSubWin +=1)
-		make/o/n =100 $"root:testSubWin_y" + num2str (iSubWin)
-		make/o/n =100 $"root:testSubWin_x" + num2str (iSubWin) 
-		WAVE cs.userWaves [0] = $"root:testSubWin_y" + num2str (iSubWin)
-		WAVE cs.userWaves [1] = $"root:testSubWin_x" + num2str (iSubWin)
-		// range of Y data roughly 2x that of X data. With aspectRatio 0.5, graphs should be close to square
-		cs.userWaves [0] = enoise (12)
-		cs.userWaves [1] = 10 + enoise (6)
+	for (iSubwin =0; iSubWin < 3; iSubWin +=1)
+		make/w/u/o/n =(20,20) $"root:testSubWin_Im" + num2str (iSubWin)
+		WAVE subWinIm =  $"root:testSubWin_Im" + num2str (iSubWin)
+		setscale/p x 0, 1e-05, "m", subWinIm
+		setscale/p y 0, 1e-05, "m", subWinIm
+		subWinIm = 200 + (1600 * (1 + sin ((p-q- iSubwin)/2) * (cos (q-p + iSubwin)/3))) + enoise (200)
+		WAVE cs.userWaves [0] = subWinIm
 		cs.subWin = "SubWin" + num2str (iSubWin)
 		s.contentStructs [iSubWin] = cs
 	endfor
 	GUIPSubWin_Display (s)
-	controlbar 40
-	Button fullScaleButton,pos={1.00,1.00},size={76.00,20.00},proc=GUIPSubWin_FullScaleButtonProc,title="Full Scale"
-	PopupMenu GUIPSubWin_PopMenu,pos={87.00,1.00},size={235.00,23.00},proc=GUIPSubWin_ArrangePopMenuProc,title="Arrange Subwindows"
-	PopupMenu GUIPSubWin_PopMenu,mode=2,popvalue="2 columns x 2 rows",value= #"GUIPSubWin_ListArrangments()"
-	Button AddSubWinButton,pos={1.00,19.00},size={76.00,21.00},proc=GUIPSubWin_DemoAddPro,title="Add SubWin"
-	PopupMenu RemoveSubWinPopup,pos={87.00,18.00},size={112.00,19.00},proc=GUIPSubWin_DemoRemoveProc,title="Remove SubWin:"
-	PopupMenu RemoveSubWinPopup,mode=0,value= #"ChildWindowList(\"\" )"
+//	controlbar 40
+//	Button fullScaleButton,pos={1.00,1.00},size={76.00,20.00},proc=GUIPSubWin_FullScaleButtonProc,title="Full Scale"
+//	PopupMenu GUIPSubWin_PopMenu,pos={87.00,1.00},size={235.00,23.00},proc=GUIPSubWin_ArrangePopMenuProc,title="Arrange Subwindows"
+//	PopupMenu GUIPSubWin_PopMenu,mode=2,popvalue="2 columns x 2 rows",value= #"GUIPSubWin_ListArrangments()"
+//	Button AddSubWinButton,pos={1.00,19.00},size={76.00,21.00},proc=GUIPSubWin_DemoAddPro,title="Add SubWin"
+//	PopupMenu RemoveSubWinPopup,pos={87.00,18.00},size={112.00,19.00},proc=GUIPSubWin_DemoRemoveProc,title="Remove SubWin:"
+//	PopupMenu RemoveSubWinPopup,mode=0,value= #"ChildWindowList(\"\" )"
 end
 
 // ********************************************************************************************************	
@@ -744,15 +651,39 @@ end
 // 2016/11/17 by Jamie Boyd - initial version
 function GUIPSubWin_demoDisplaySubWin (cs)
 	STRUCT GUIPSubWin_ContentStruct &cs
-	
-	// display waves Y vs X
-	appendToGraph cs.userWaves [0] vs cs.userWaves [1]
-	modifygraph mode ($nameofWave(cs.userWaves [0])) = 3
-	// draw a rectangle 2x as high as it is wide, rougly over the data
-	// With aspectRatio 0.5, the rectangle should display as a square
-	SetDrawEnv xcoord= bottom,ycoord= left, fillpat= 0
-	DrawRRect 5,-10,15,10
+
+	appendimage cs.userWaves [0]
+	appendToGraph cs.userWaves [1] vs cs.userWaves [2]
+	modifygraph mode ($nameofWave(cs.userWaves [1])) = 4, marker = 19
+	modifygraph margin = 1
 end
+
+
+function GUIPSubWin_demoAddSubWin (subwinName)
+	string subwinName
+	
+	STRUCT GUIPSubWin_ContentStruct cs
+	cs.graphName = "SubWinDemoGraph"
+	cs.subWin = subwinName
+	funcref GUIPSubWin_AddProto cs.addContent = GUIPSubWin_demoDisplaySubWin
+	cs.nUserWaves = 3
+	make/w/u/o/n =(20,20) $"root:testSubWin_Im" + subwinName
+	WAVE subWinIm =  $"root:testSubWin_Im" + subwinName
+	setscale/p x 0, 1e-05, "m", subWinIm
+	setscale/p y 0, 1e-05, "m", subWinIm
+	subWinIm = 200 + (1600 * (1 + sin ((p-q)/2) * (cos (q-p)/3))) + enoise (200)
+	WAVE cs.userWaves [0] = subWinIm
+	WAVE cs.userWaves [1] = $"root:testSubWin_y"
+	WAVE cs.userWaves [2] = $"root:testSubWin_x" 
+	GUIPSubWin_Add (cs)
+end
+
+
+function GUIPSubWin_demoRemoveSubWin (subwinName)
+	string subwinName
+	GUIPSubWin_Remove ("SubWinDemoGraph", subwinName)
+end
+	
 
 
 Function GUIPSubWin_DemoRemoveProc(pa) : PopupMenuControl
@@ -761,12 +692,7 @@ Function GUIPSubWin_DemoRemoveProc(pa) : PopupMenuControl
 	switch( pa.eventCode )
 		case 2: // mouse up
 			
-			STRUCT GUIPSubWin_UtilStruct s
-			STRUCT GUIPSubWin_ContentStruct cs
-			s.graphName = "SubWinDemoGraph"
-			s.nSubWins = 1
-			s.contentStructs [0].subWin = pa.popStr
-			GUIPSubWin_Remove (s)
+			GUIPSubWin_Remove ("SubWinDemoGraph", pa.popStr)
 			
 			break
 		case -1: // control being killed
@@ -786,7 +712,7 @@ Function GUIPSubWin_DemoAddPro(ba) : ButtonControl
 			string children = ChildWIndowList ("SubWinDemoGraph")
 			variable iChild
 			string firstFree = "SubWin0"
-			for (iChild =0;whichListItem (firstFree,children) > -1 ;iCHild +=1,firstFree ="SubWin" + num2str (iCHild))
+			for (iChild =0;whichListItem (firstFree,children, ";", 0,0) > -1 ;iCHild +=1,firstFree ="SubWin" + num2str (iCHild))
 			endfor
 			
 			STRUCT GUIPSubWin_UtilStruct s
@@ -794,13 +720,13 @@ Function GUIPSubWin_DemoAddPro(ba) : ButtonControl
 			s.graphName = "SubWinDemoGraph"
 			s.graphTitle = ""
 			s.nSubWins = 1
-			s.aspectRatio = 0.5 // width to height scaling ratio
-			s.yokedAxes = 1
-			s.marginL  = 28
-			s.marginT = 7
-			s.marginR = 7
-			s.marginB = 28
-			funcref GUIPSubWin_AddProto s.addContent = GUIPSubWin_demoDisplaySubWin
+//			s.aspectRatio = 0.5 // width to height scaling ratio
+//			s.yokedAxes = 1
+//			s.marginL  = 28
+//			s.marginT = 7
+//			s.marginR = 7
+//			s.marginB = 28
+			funcref GUIPSubWin_AddProto cs.addContent = GUIPSubWin_demoDisplaySubWin
 			cs.nUserWaves =2
 			make/o/n =100 $"root:testSubWin_y" + num2str (iChild)
 			make/o/n =100 $"root:testSubWin_x" + num2str (iChild) 
@@ -811,7 +737,7 @@ Function GUIPSubWin_DemoAddPro(ba) : ButtonControl
 			cs.userWaves [1] = 10 + enoise (6)
 			cs.subWin = "SubWin" + num2str (iChild)
 			s.contentStructs [0] = cs
-			GUIPSubWin_Add (s)
+			GUIPSubWin_Add (cs)
 			break
 		case -1: // control being killed
 			break
@@ -819,4 +745,5 @@ Function GUIPSubWin_DemoAddPro(ba) : ButtonControl
 
 	return 0
 End
+
 

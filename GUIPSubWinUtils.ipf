@@ -76,7 +76,7 @@ Structure GUIPSubWin_WinInfoStruct
 	float yEnd				// for an image, height x yPixel Size
 	uChar holdAspect		// set to hold x-y axes aspect ratio to 1, what you mostly want for images
 	uChar prefMoreCols		// when adding subwindows, add a column if matrix is full
-	uChar reSizeByWidth
+	uChar reSizeByWidth	// when sets, use plan, auto. when cleared, use auto, plan
 endstructure
 
 //***********************************************************************************	
@@ -235,8 +235,10 @@ function GUIPSubWin_Display (us)
 			yGraphStart = iRow * yProp
 			ygraphEnd = min (0.999, (yGraphStart + yProp))
 			cs = us.contentStructs [iSubwin]
+			cs.graphName = us.graphName
 			Display/N=$cs.subWin/W=(xGraphStart, yGraphStart ,xGraphEnd, ygraphEnd)/HOST=$us.graphName
 			SetActiveSubwindow $us.graphName + "#" + cs.subWin
+			
 			cs.addContent(cs)
 		endfor
 	endif
@@ -412,7 +414,82 @@ function GUIPSubWin_Remove (graphName, subWin)
 		MoveSubWindow /w=$graphName + "#" +stringfromList (iSubWin, graphList, ";"), fnum=(xGraphStart,yGraphStart, xGraphEnd, ygraphEnd)
 	endfor
 End
+
+
+// call this after adding/removing subwindows manually
+Function GUIPSubWin_ReapportionSubWins (graphName)
+	string graphName
 	
+	// how many subwindows do we have?
+	string graphList = removefromlist ("controlPanel", ChildWindowList(graphName), ";", 0)
+	variable nSubwins = itemsinlist (graphList, ";")
+	STRUCT GUIPSubWin_WinInfoStruct info
+	StructGet/S info, GetUserData (graphName, "", "subwinUtil")
+	variable matrixChanged =0
+	if (nSubwins > info.nRows * info.nCols)
+		if (info.prefMoreCols)
+			info.nCols += 1
+			matrixChanged = 1
+		else
+			info.nRows += 1
+			matrixChanged = 1
+		endif
+	else
+		if (info.prefMoreCols)
+			if (nSubwins <= (info.nCols-1) * info.nRows)
+				info.nCols -= 1
+				matrixChanged = 1
+			endif
+			if (nSubwins <= (info.nCols * (info.nRows-1)))
+				info.nRows -=1
+				matrixChanged = 1
+			endif
+		else
+			if (nSubwins <= (info.nCols * (info.nRows -1)))
+				info.nRows -= 1
+				matrixChanged = 1
+			endif
+			if (nSubwins <= ((info.nCols-1) * info.nRows))
+				info.nCols -= 1
+				matrixChanged =1
+			endif
+		endif
+	endif
+	
+	variable xProp = 1/info.nCols
+	variable yProp = 1/info.nRows
+	variable iSubWin, iCol, iRow
+	variable xGraphStart, xGraphEnd, yGraphStart, ygraphEnd
+	
+	
+	// reposition subwindows
+	for (iSubWin =0; iSubWin < nSubWins; iSubWin +=1)
+		iCol = mod (iSubWin, info.nCols)
+		iRow = floor (iSubwin/info.nCols)
+		xGraphStart = iCol * xProp
+		xGraphEnd = min (0.999, (xGraphStart + xProp))  // because proportions need to be less than 1 or Igor might assume they are points
+		yGraphStart = iRow * yProp
+		ygraphEnd = min (0.999, (yGraphStart + yProp))
+		MoveSubWindow /w=$graphName + "#" +stringfromList (iSubWin, graphList, ";"), fnum=(xGraphStart,yGraphStart, xGraphEnd, ygraphEnd)
+	endfor
+
+	
+	if (matrixChanged)
+		if (info.holdAspect)
+			if (info.reSizeByWidth)
+				ModifyGraph/w=$graphName width=0, height={Plan,(((info.yEnd - info.yStart) * info.nRows)/((info.xend - info.xStart) * info.nCols)),left,bottom}
+			else
+				ModifyGraph/w=$graphName height=0, width={Plan,(((info.xend - info.xStart) * info.nCols)/((info.yEnd - info.yStart) * info.nRows)),bottom,left}
+			endif
+		endif
+		string infoStr
+		StructPut/S info, infoStr
+		SetWindow $graphName userdata (subwinUtil) = infoStr
+	endif
+
+end
+
+
 //***********************************************************************************	
 // Set Left and Bottom Axes to full scale for all graph subwindows
 // sets min/max of each graph subwindow to min/max of all graphs
@@ -487,7 +564,7 @@ Function GUIPSubWin_setResizeMode (GraphName, reSizeMode)
 	endif
 	string infoStr
 	structPut/S info, infoStr
-	SetWindow SubWinDemoGraph userdata (subwinUtil) = infoStr
+	SetWindow $GraphName userdata (subwinUtil) = infoStr
 end
 
 

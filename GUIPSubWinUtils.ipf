@@ -242,17 +242,18 @@ function GUIPSubWin_Display (us)
 			cs.addContent(cs)
 		endfor
 	endif
-	//
+	// exterior control panel
 	SetActiveSubwindow ##
 	NewPanel/k=2/HOST=#/EXT=3/W=(0,50,400,0)  as "Controls"
-	PopupMenu arrangePopup,pos={196.00,3.00},size={199.00,20.00},proc=GUIPSubWin_ArrangePopMenuProc
-	PopupMenu arrangePopup,title="Arrrange ",fSize=12
-	PopupMenu arrangePopup,mode=1,popvalue="",value=#"GUIPSubWin_ListArrangments()"
-	Button fullScaleButton,pos={193.00,24.00},size={63.00,20.00},proc=GUIPSubWinFullScaleProc
+	PopupMenu arrangePopup,pos={230.00,2.00},size={157.00,19.00},bodyWidth=120,proc=GUIPSubWin_ArrangePopMenuProc
+	PopupMenu arrangePopup,title="Matrix",fSize=12
+	PopupMenu arrangePopup,mode=1,popvalue="1 Column x 1 Row",value=#"GUIPSubWin_ListArrangments()"
+	Button fullScaleButton,pos={227.00,25.00},size={60.00,20.00},proc=GUIPSubWinFullScaleProc
 	Button fullScaleButton,title="Full Scale",fSize=12
-	PopupMenu SetResizePopMenu,pos={266.00,24.00},size={128.00,20.00},proc=GUIPSubWin_ResizePopMenuProc
+	PopupMenu SetResizePopMenu,pos={289.00,26.00},size={105.00,19.00},bodyWidth=70,proc=GUIPSubWin_ResizePopMenuProc
 	PopupMenu SetResizePopMenu,title="Resize",fSize=12
-	PopupMenu SetResizePopMenu,mode=3,popvalue="",value=#"\"Free;by Height;by Width\""
+	PopupMenu SetResizePopMenu,mode=3,popvalue="by Width",value=#"\"Free;by Height;by Width\""
+
 	RenameWindow #,controlPanel
 	SetActiveSubwindow ##
 end
@@ -271,7 +272,7 @@ function GUIPSubWin_Add (cs)
 	variable nSubwins = ItemsinList (prevSubWins)
 	variable xGraphStart, xGraphEnd, yGraphStart, yGraphEnd	
 	if (whichListItem (cs.subWin, prevSubWins, ";", 0,0) > -1)
-		print "Subwindow with the name \"" + cs.subWin + "\" already exists."
+		//print "Subwindow with the name \"" + cs.subWin + "\" already exists."
 		getwindow $cs.graphName gsizeDC
 		variable hostXsize = (V_Right - V_Left), hostYSize = (V_Bottom - V_Top)
 		getwindow $cs.graphName + "#" + cs.subWin gsizeDC

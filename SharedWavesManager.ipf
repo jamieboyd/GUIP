@@ -1,9 +1,9 @@
 #pragma rtGlobals=1		// Use modern global access method.
 #pragma IgorVersion = 5.05
 
-#include "CustomFolderLoad"
-#include "ListObjects"
-#include "killDisplayedWave"
+#include "GUIPDirectoryLoad"
+#include "GUIPList"
+#include "GUIPKillDisplayedWave"
 //Last modified Oct 03 2012 by Jamie Boyd
 
 //SharedWavesManager provides a simple interface to load, edit, and save waves that are shared with files on disk. 
@@ -343,7 +343,7 @@ Function SharedWaves_UpdateShared (instanceClean)
 	SharedWaves_CleanShared (instanceClean)
 	SVAR fldrStr = $"root:packages:sharedWaves:" + instanceClean + ":fldrStr"
 	string importPathStr = InstanceClean + "_Path"
-	string fldrwaves = ListObjects(fldrStr, 1, "*", 0, "")
+	string fldrwaves = GUIPListObjs(fldrStr, 1, "*", 0, "")
 	variable iWave, nWaves = itemsinlist (fldrwaves, ";")
 	string tableName = instanceClean + "_SW#SWT"
 	string wavePath 
@@ -391,11 +391,11 @@ Function SharedWaves_SetPathProc(ba) : ButtonControl
 			WAVE/T DirListWave = $"root:packages:sharedwaves:" + instanceClean + ":DirListWave"
 			WAVE DirListSelWave = $"root:packages:sharedwaves:" + instanceClean + ":DirListSelWave"
 			SVAR pathDescStr = $"root:packages:sharedWaves:" + instanceClean + ":dirPathDescStr"
-			string newPathDesc =  CFL_SetImPathProc(instanceClean + "_Path", "Igor binary waves and saving them")
+			string newPathDesc =  GUIPDirectorySetImPathProc(instanceClean + "_Path", "Igor binary waves and saving them")
 			if (cmpStr (newPathDesc, "") != 0)
 				groupbox SetDirGrp  win=$ba.win, disable =1
 				pathDescStr =newPathDesc
-				CFL_ShowFilesinFolder (DirListWave, DirListSelWave, ".ibw", "", "", instanceClean + "_Path")
+				GUIPDirectoryShowFiles (instanceClean + "_Path", DirListWave, DirListSelWave, ".ibw", "", 0 )
 				// if we have a folder, update shared waves
 				SVAR fldrStr = $"root:packages:sharedwaves:" + instanceClean + ":fldrStr"
 				if ((cmpStr (fldrStr, "") != 0) && (dataFolderExists (fldrStr)))
@@ -438,7 +438,7 @@ Function SharedWaves_UpdatePathList (instanceClean)
 	
 	WAVE/T DirListWave = $"root:packages:sharedwaves:" + instanceClean + ":DirListWave"
 	WAVE DirListSelWave = $"root:packages:sharedwaves:" + instanceClean + ":DirListSelWave"
-	CFL_ShowFilesinFolder (DirListWave, DirListSelWave, ".ibw", "", "", instanceClean + "_Path")
+	GUIPDirectoryShowFiles (instanceClean + "_Path", DirListWave, DirListSelWave, ".ibw", "", 0)
 end
 
 //*****************************************************************************************************
@@ -455,7 +455,7 @@ Function SharedWaves_SelectAllProc(ba) : ButtonControl
 			else
 				WAVE ListSelWave = $"root:packages:sharedwaves:" + instanceClean + ":FldrListSelWave"
 			endif
-			CFL_SelectAllProc(ListSelWave)
+			GUIPDirectorySelectAll(ListSelWave)
 		case -1: // control being killed
 			break
 	endswitch
@@ -473,19 +473,19 @@ Function SharedWaves_LoadSelectedProc(ba) : ButtonControl
 		case 2: // mouse up
 			string instanceClean = stringfromlist (0, ba.win, "_")
 
-			STRUCT CFL_loadStruct s
+			STRUCT GUIPDirectoryLoadStruct s
 			s.importPathStr = instanceClean + "_Path"
 			SVAR TargetFolderStr = $"root:packages:sharedWaves:" + instanceClean + ":fldrStr"
-			WAVE/T s.FolderListWave = $"root:packages:sharedwaves:" + instanceClean + ":DirListWave"
-			WAVE s.FolderListSelWave = $"root:packages:sharedwaves:" + instanceClean + ":DirListSelWave"
-			s.TargetFolderStr=TargetFolderStr
-			funcref CFL_LoadProtoFunc s.LoadFunc = SharedWaves_LoadFunc
-			funcref CFL_ProcessProtoFunc s.ProcessFunc = SharedWaves_ProcessFunc
+			WAVE/T s.DirectoryListWave = $"root:packages:sharedwaves:" + instanceClean + ":DirListWave"
+			WAVE s.DirectoryListSelWave = $"root:packages:sharedwaves:" + instanceClean + ":DirListSelWave"
+			s.TargetDataFolderStr=TargetFolderStr
+			funcref GUIPprotoFuncSSSS s.LoadFunc = SharedWaves_LoadFunc
+			funcref GUIPprotoFuncWSSSS s.ProcessFunc = SharedWaves_ProcessFunc
 			s.loadOptionStr =instanceClean
 			s.processOptionStr = instanceClean
 			s.overWrite = 2
 			s.WaveRename =2
-			CFL_CustomFolderLoad (s)
+			GUIPDirectoryLoad (s)
 			SharedWaves_UpdateFldr (instanceClean)
 			break
 		case -1: // control being killed
@@ -497,11 +497,11 @@ End
 //*****************************************************************************************************
 // loads an individual .ibw as a shared wave, and tries to harmonize with waves already in dataFolder
 // last modified Jan 13 2012 by Jamie Boyd
-function SharedWaves_LoadFunc(ImportPathStr, FileNameStr, instanceClean)
+function SharedWaves_LoadFunc(ImportPathStr, FileNameStr, instanceClean, mStry)
 	string ImportPathStr	// string containing the name of an Igor path to the folder on disk from which to import files (ImportPath)
 	string FileNameStr	// string containing the name of the selected file
 	string instanceClean	// option string used to pass name of instance of shared waves manager
-	
+	string mStry
 	// does a wave with the same name as the .ibw file already exist in the dataFolder?
 	SVAR fldrStr = $"root:packages:sharedWaves:" + instanceClean + ":fldrStr"
 	String newWaveName = removeEnding (filenameStr, ".ibw") 

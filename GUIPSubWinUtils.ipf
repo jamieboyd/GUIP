@@ -248,9 +248,9 @@ function GUIPSubWin_Display (us)
 	PopupMenu arrangePopup,pos={230.00,2.00},size={157.00,19.00},bodyWidth=120,proc=GUIPSubWin_ArrangePopMenuProc
 	PopupMenu arrangePopup,title="Matrix",fSize=12
 	PopupMenu arrangePopup,mode=1,popvalue="1 Column x 1 Row",value=#"GUIPSubWin_ListArrangments()"
-	Button fullScaleButton,pos={227.00,25.00},size={60.00,20.00},proc=GUIPSubWinFullScaleProc
+	Button fullScaleButton,pos={222.00,25.00},size={60.00,20.00},proc=GUIPSubWinFullScaleProc
 	Button fullScaleButton,title="Full Scale",fSize=12
-	PopupMenu SetResizePopMenu,pos={289.00,26.00},size={105.00,19.00},bodyWidth=70,proc=GUIPSubWin_ResizePopMenuProc
+	PopupMenu SetResizePopMenu,pos={289.00,26.00},size={105.00,19.00},bodyWidth=76,proc=GUIPSubWin_ResizePopMenuProc
 	PopupMenu SetResizePopMenu,title="Resize",fSize=12
 	PopupMenu SetResizePopMenu,mode=3,popvalue="by Width",value=#"\"Free;by Height;by Width\""
 
@@ -579,19 +579,19 @@ Function/S  GUIPSubWin_ListArrangments ()
 	if (nSubWins == 0)
 		arrangeStr = "\\M1(No subWindows."
 	elseif (nSubWins == 1)
-		arrangeStr = "1 Column x 1 Row;"
+		arrangeStr = "1 Col x 1 Row;"
 	else
 		variable iCols, iRows, halfWay = ceil(sqrt (nSubWins))
 		string addStr
 		for (iCols =1; iCols < halfWay; iCols +=1)
 			iRows = ceil (nSubWIns/iCols)
-			addStr= num2str (iCols) + SelectString((iCols == 1) , " Columns",  " Column") + " x "
+			addStr= num2str (iCols) + SelectString((iCols == 1) , " Cols",  " Col") + " x "
 			addStr += num2str (iRows) + SelectString((iRows == 1) , " Rows", " Row")
 			arrangeStr += addStr + ";"
 		endfor
 		for (iRows = halfWay; iRows > 0; iRows -=1)
 			iCols = ceil (nSubWIns/iRows)
-			addStr= num2str (iCols) + SelectString((iCols == 1) , " Columns",  " Column") + " x "
+			addStr= num2str (iCols) + SelectString((iCols == 1) , " Cols",  " Col") + " x "
 			addStr += num2str (iRows) + SelectString((iRows == 1) , " Rows", " Row")
 			if (WhichListItem(addStr, arrangeStr, ";", 0, 0) ==-1)
 				arrangeStr += addStr + ";"

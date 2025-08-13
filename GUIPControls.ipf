@@ -1,7 +1,7 @@
 #pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3		// Use modern global access method.
 #pragma IgorVersion=6.1
-#pragma version = 1		//	Last Modified: 2025/07/20 by Jamie Boyd added MinMax slider
+#pragma version = 1		//	Last Modified: 2025/08/11 by Jamie Boyd added MinMax slider
 
 // Modified: 2025/07/10 by Jamie Boyd - updated GUIPSIsetVar functions
 #pragma ModuleName= GUIPControls
@@ -60,7 +60,7 @@ function GUIPSIsetVarEnable (panelName, setVariableName, addFuncStr, MinVal, Max
 	string infoStr
 	StructPut/S info, infoStr
 	SetVariable $setVariableName win=$panelName,limits={-inf,inf,increment}, format=formatStr, proc=GUIPSIsetVarProc
-	SetVariable $setVariableName win=$panelName, userdata=infoStr, userdata (FUNCSTR)=addFuncStr
+	SetVariable $setVariableName win=$panelName, userdata=infoStr, userData(FUNCSTR)=addFuncStr
 end
 
 
@@ -351,69 +351,84 @@ end
 
 //*****************************************************************************************************
 //  Sets user data for name of additional funtion to run when setvariable is activated
-// Last modified 2025/07/07 by Jamie Boyd - now use key-value data
+// Last modified 2025/08/11 by Jamie Boyd - now use key-value data
 Function GUIPSISetVarSetFunc (panelName, setVariableName, funcName)
 	String PanelName
 	String setVariableName
 	String funcName
 	
-	controlinfo/W=$panelName $setVariableName
-	s_UserData = ReplaceStringByKey("addFuncStr", s_UserData, funcName,":",";")
-	SetVariable $setVariableName win=$panelName, userdata=s_UserData
+	SetVariable $setVariableName win=$panelName,userdata (FUNCSTR)=funcName
 end
 
 //*****************************************************************************************************
 //  Sets user data for minimum value for the setvariable
-// Last modified 2015/07/07 by Jamie Boyd - now use key-value data
+// Last modified2025/08/11 by Jamie Boyd - now use key-value data
 Function GUIPSISetVarSetMin (panelName, setVariableName, minVal)
 	String PanelName
 	String setVariableName
 	variable minVal
 	
 	controlinfo/W=$panelName $setVariableName
-	s_UserData = ReplaceNumberByKey("ValMin", s_UserData, minVal, ":",";")
-	SetVariable $setVariableName win=$panelName, userdata=s_UserData
+	struct SIsetVarStruct info
+	StructGet/S info, s_UserData
+	info.valMin = MinVal
+	string infoStr
+	StructPut/S info, infoStr
+	SetVariable $setVariableName win=$panelName,userdata=infoStr
 end
 
 //*****************************************************************************************************
 //  Sets user data for maximum value for the setvariable
-// Last modified 2025/07/07 by Jamie Boyd - now use key-value data
+// Last modified 2025/08/11 by Jamie Boyd - now use key-value data
 Function GUIPSISetVarSetMax (panelName, setVariableName, maxVal)
 	String PanelName
 	String setVariableName
 	variable maxVal
 	
 	controlinfo/W=$panelName $setVariableName
-	s_UserData = ReplaceNumberByKey("ValMax", s_UserData, maxVal, ":",";")
-	SetVariable $setVariableName win=$panelName, userdata=s_UserData
+	struct SIsetVarStruct info
+	StructGet/S info, s_UserData
+	info.valMax = maxVal
+	string infoStr
+	StructPut/S info, infoStr
+	SetVariable $setVariableName win=$panelName,userdata=infoStr
 end
 
 
 //*****************************************************************************************************
 //  Sets user data for automatically adjusting increment for the setvariable
-// Last modified 2025/07/07 by Jamie Boyd - now use key-value data
+// Last modified 2025/08/11 by Jamie Boyd - now use key-value data
 Function GUIPSISetVarSetAutoIncr (panelName, setVariableName, autoIncrOn)
 	String PanelName
 	String setVariableName
 	variable autoIncrOn
-	
+
 	controlinfo/W=$panelName $setVariableName
-	s_UserData = ReplaceNumberByKey("AutoIncr", s_UserData, autoIncrOn,":",";")
-	SetVariable $setVariableName win=$panelName, userdata=s_UserData
+	struct SIsetVarStruct info
+	StructGet/S info, s_UserData
+	info.autoIncrement = autoIncrOn
+	string infoStr
+	StructPut/S info, infoStr
+	SetVariable $setVariableName win=$panelName,userdata=infoStr
+	
 end
 
 
 //*****************************************************************************************************
-//  Sets user data forminimum allowed increment when automatically adjusting incremen
-// Last modified 2025/07/07 by Jamie Boyd - now use key-value data
+//  Sets user data for minimum allowed increment when automatically adjusting increment
+// Last modified 2025/08/11 by Jamie Boyd - now use key-value data
 Function GUIPSISetVarSetMinIncr(panelName, setVariableName, minIncr)
 	String PanelName
 	String setVariableName
 	variable minIncr
-	
+
 	controlinfo/W=$panelName $setVariableName
-	s_UserData = ReplaceNumberByKey("MinIncr", s_UserData, minIncr,":",";")
-	SetVariable $setVariableName win=$panelName, userdata=s_UserData
+	struct SIsetVarStruct info
+	StructGet/S info, s_UserData
+	info.minIncrement = minIncr
+	string infoStr
+	StructPut/S info, infoStr
+	SetVariable $setVariableName win=$panelName,userdata=infoStr
 end
 	
 //**********************************************GUIPTabControl***********************************************
@@ -3610,6 +3625,7 @@ Function MinMaxSlider_Manual (thePanel, theSlider, theThumb, theVal)
 	// make a custom action struct, fill with edited info struct, calculated mouse pos, control name, event code for mouse up
 	STRUCT WMCustomControlAction s
 	StructPut/S info, s.userdata
+	s.win=thePanel
 	s.ctrlName = theSlider
 	s.mouseLoc.h = thumbPos + info.h_off
 	s.mouseLoc.v =  8 + info.v_off
@@ -3699,7 +3715,7 @@ Function MinMaxSlider_thumbFunc(s)
 			StructGet/S info, s.userdata
 			if (info.thumbDown)
 				if (info.callWhen & kCallMouseUp)
-					funcName = getuserdata ("", s.ctrlname, "FUNCSTR")
+					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
 					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
 					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
 				endif
@@ -3733,7 +3749,7 @@ Function MinMaxSlider_thumbFunc(s)
 				endif
 				info.L_thumbPos_prev = s.mouseLoc.h
 				if (info.callWhen & kCallMouseMoved)
-					funcName = getuserdata ("", s.ctrlname, "FUNCSTR")
+					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
 					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
 					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
 				endif
@@ -3749,7 +3765,7 @@ Function MinMaxSlider_thumbFunc(s)
 				info.R_thumbPos_prev = s.mouseLoc.h
 				
 				if (info.callWhen & kCallMouseMoved)
-					funcName = getuserdata ("", s.ctrlname, "FUNCSTR")
+					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
 					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
 					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
 				endif

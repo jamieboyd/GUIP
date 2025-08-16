@@ -1,7 +1,7 @@
 #pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3		// Use modern global access method.
 #pragma IgorVersion=6.1
-#pragma version = 1		//	Last Modified: 2025/08/11 by Jamie Boyd added MinMax slider
+#pragma version = 1		//	Last Modified: 2025/08/15 by Jamie Boyd added MinMax slider
 
 // Modified: 2025/07/10 by Jamie Boyd - updated GUIPSIsetVar functions
 #pragma ModuleName= GUIPControls
@@ -3701,10 +3701,10 @@ Function MinMaxSlider_thumbFunc(s)
 			StructGet/S info, s.userdata
 			s.mouseLoc.h -= info.h_off
 			s.mouseLoc.v -= info.v_off
-			if (((s.mouseLoc.v < 20) && (s.mouseLoc.h > info.L_thumbPos - 5)) && (s.mouseLoc.h < info.L_thumbPos + 3))
+			if (((s.mouseLoc.v < 20) && (s.mouseLoc.h > info.L_thumbPos - 8)) && (s.mouseLoc.h < info.L_thumbPos + 5))
 				info.thumbDown = kLeftThumb
 				StructPut/S info,s.userdata	// will be written out to control
-			elseif (((s.mouseLoc.v < 20) && (s.mouseLoc.h > info.R_thumbPos - 3)) && (s.mouseLoc.h < info.R_thumbPos +5 ))
+			elseif (((s.mouseLoc.v < 20) && (s.mouseLoc.h > info.R_thumbPos - 5)) && (s.mouseLoc.h < info.R_thumbPos +8 ))
 				info.thumbDown = kRightThumb
 				StructPut/S info,s.userdata	// will be written out to control
 			endif

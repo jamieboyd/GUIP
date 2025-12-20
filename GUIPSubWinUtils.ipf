@@ -507,11 +507,18 @@ Function GUIPSubWin_FullScale(theGraph)
 	variable iGraph, nGraphs = itemsinlist (graphList, ";")
 	string subWinStr
 	//Find global mins and maxs across all the subwindows
+	// check for reverse axes
 	info.xStart = INF; info.xEnd = -INF;info.yStart = INF; info.yEnd = -INF 
 	for (iGraph =0; iGraph < nGraphs; iGraph+=1)
 		SubWinStr = theGraph +  "#" +  stringfromlist (iGraph, graphList)
-		Setaxis/W= $SubWinStr /A left
-		Setaxis/W= $SubWinStr /A bottom
+		Getaxis/Q/W= $SubWinStr left
+		if (V_max > V_min)
+			Setaxis/W= $SubWinStr /A left
+			Setaxis/W= $SubWinStr /A bottom
+		else
+			Setaxis/W= $SubWinStr /A/R left
+			Setaxis/W= $SubWinStr /A/R bottom
+		endif
 		DoUpdate/W=$SubWinStr
 		Getaxis/Q/W= $SubWinStr bottom
 		info.xStart = min (V_min, info.xStart)

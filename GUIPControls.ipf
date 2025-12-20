@@ -144,12 +144,18 @@ Function GUIPSIsetVarProc(sva) : SetVariableControl
 		if (abs (sva.dVal) < info.minIncrement)
 			sva.dVal = 0
 		endif
-		// write the value back to the global variable/setvariable
+		// write the value back to the global variable/setvariable internal value
 		if (cmpStr (sva.vName, "") ==0) // no variable, so must be internal value
 			SetVariable $sva.ctrlName win=$sva.win, value=_NUM:sva.dVal
 		else
-			NVAR gVal = $(S_DataFolder +  S_Value)
-			gval = sva.dVal
+			NVAR/Z gVal = $(S_DataFolder +  S_Value)
+			if (NVAR_Exists(gVal))
+				gval = sva.dVal
+			else	// could be a point in a wave, need execute for that
+				string cmDstr
+				sprintf cmDstr, "%s%s=%.6e", S_DataFolder, S_Value, sva.dVal
+				execute cmDstr
+			endif
 		endif
 		// Adjust increment, if requested
 		if (info.autoIncrement)

@@ -579,7 +579,7 @@ end
 // The wave byteWave must  contains only values from 0-255,  as each point in the wave is excpected to contain one byte
 // Least significant byte must be at first point in the wave.
 // Last Modified: 2014/05/27 by Jamie Boyd
-Function GUIP2CBytesToVal (byteWave)
+Threadsafe Function GUIP2CBytesToVal (byteWave)
 	wave byteWave 
 	
 	variable calcVal =0
@@ -640,7 +640,7 @@ end
 // returns 1 if number is greater than most positive integer possible with given number of bytes in wave and sets wave to most positive integer
 // returns 0 if the theVal is within the range of the given number of bytes
 // Last Modified: 2013/12/18 by Jamie Boyd
-Function GUIPValTo2CBytes (theVal, byteWave)
+Threadsafe Function GUIPValTo2CBytes (theVal, byteWave)
 	variable theVal
 	WAVE byteWave
 	

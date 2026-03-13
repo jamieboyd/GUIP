@@ -343,6 +343,7 @@ function GUIPSubWin_Add (cs)
 			cs.addContent(cs)
 			SetAxis /W= $cs.graphName + "#" + cs.subWin bottom info.xStart, info.xEnd
 			SetAxis /W= $cs.graphName + "#" + cs.subWin left info.yStart, info.yEnd
+			ModifyGraph/w= $cs.graphName + "#" + cs.subWin nticks=0,noLabel=2
 		endif
 	endif
 end

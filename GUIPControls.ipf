@@ -3601,9 +3601,14 @@ end
 // *************************************** MinMaxSlider_Manual **************************************
 //  Sets the position of a thumb to a chosen value, calling the update function
 // Last Modifies: 2027/07/20 by Jamie Boyd removed errant print statement
-Function MinMaxSlider_Manual (thePanel, theSlider, theThumb, theVal)
+Function MinMaxSlider_Manual (thePanel, theSlider, theThumb, theVal, [skipUpdate])
 	string thePanel, theSlider
 	variable theThumb, theVal
+	variable skipUpdate
+	
+	if (ParamIsDefault(skipUpdate))
+		skipUpdate = 0
+	endif
 	
 	// get user data from cobtrol, put into info struct
 	STRUCT MinMaxSliderInfo info
@@ -3636,6 +3641,10 @@ Function MinMaxSlider_Manual (thePanel, theSlider, theThumb, theVal)
 	s.mouseLoc.h = thumbPos + info.h_off
 	s.mouseLoc.v =  8 + info.v_off
 	s.eventCode = kCCE_mouseup
+	s.eventMod =0
+	if (skipUpdate)
+		s.eventMod = s.eventMod | 8
+	endif
 	MinMaxSlider_thumbFunc(s)		// call MinMaxSlider_thumbFunc with structure we made
 	// reset thumb down in info struct, and write edited info back to control user data
 	info.thumbDown = 0
@@ -3719,12 +3728,11 @@ Function MinMaxSlider_thumbFunc(s)
 		case kCCE_mouseup:
 		case kCCE_mouseup_out:
 			StructGet/S info, s.userdata
-			if (info.thumbDown)
-				if (info.callWhen & kCallMouseUp)
-					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
-					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
-					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
-				endif
+			if (info.thumbDown && (info.callWhen & kCallMouseUp) && (!(s.eventMod & 8)))
+				funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
+				FUNCREF guipprotoFuncVVVV actionFunc = $funcName
+				actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
+				//print "kCCE_mouseup"
 			endif
 			s.needAction= 1
 			info.thumbDown = 0
@@ -3754,10 +3762,11 @@ Function MinMaxSlider_thumbFunc(s)
 					info.R_thumbVal = info.scaleValMin + (info.R_thumbPos - info.scalePosStart ) * info.ValPerPos
 				endif
 				info.L_thumbPos_prev = s.mouseLoc.h
-				if (info.callWhen & kCallMouseMoved)
+				if ((info.callWhen & kCallMouseMoved) && (!(s.eventMod & 8)))
 					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
 					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
 					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
+					//print "kCallMouseMoved"
 				endif
 				StructPut/S info,s.userdata	// will be written out to control
 				s.needAction= 1
@@ -3769,13 +3778,11 @@ Function MinMaxSlider_thumbFunc(s)
 					info.L_thumbVal = info.scaleValMin + (info.L_thumbPos - info.scalePosStart ) * info.ValPerPos
 				endif
 				info.R_thumbPos_prev = s.mouseLoc.h
-				
-				if (info.callWhen & kCallMouseMoved)
+				if ((info.callWhen & kCallMouseMoved) && (!(s.eventMod & 8)))
 					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
 					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
 					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
 				endif
-
 				StructPut/S info,s.userdata	// will be written out to control
 				s.needAction= 1
 			endif

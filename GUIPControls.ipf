@@ -1,8 +1,9 @@
 #pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3		// Use modern global access method.
 #pragma IgorVersion=6.1
-#pragma version = 1		//	Last Modified: 2025/08/15 by Jamie Boyd added MinMax slider
+#pragma version = 1.02		//	Last Modified: 2026/06/19 by Jamie Boyd added extra option for MinMax slider
 
+// Modified: 2025/08/15 by Jamie Boyd added MinMax slider
 // Modified: 2025/07/10 by Jamie Boyd - updated GUIPSIsetVar functions
 #pragma ModuleName= GUIPControls
 
@@ -3498,8 +3499,9 @@ End
 
 
 //**************************** Slider with two Thumbs *********************************************
-// Custom control that allows setting a low value and a high value form the same slider control
-// constants setting how we draw the slider. Should control more of the drawing
+// Custom control that allows setting a low value and a high value from the same slider control
+
+// constants setting how we draw the slider. Should have options to control more of the drawing, e.g. colors
 static constant kScalePadding = 10		// this much horizontal padding on both sides of scale bar
 static constant kCtrlHeight = 30		// drawing height of control, might want to change if we used a bigger font for scale
 
@@ -3600,7 +3602,7 @@ end
 
 // *************************************** MinMaxSlider_Manual **************************************
 //  Sets the position of a thumb to a chosen value, calling the update function
-// Last Modifies: 2027/07/20 by Jamie Boyd removed errant print statement
+// Last Modifies: 2025/07/20 by Jamie Boyd removed errant print statement
 Function MinMaxSlider_Manual (thePanel, theSlider, theThumb, theVal, [skipUpdate])
 	string thePanel, theSlider
 	variable theThumb, theVal
@@ -3641,9 +3643,9 @@ Function MinMaxSlider_Manual (thePanel, theSlider, theThumb, theVal, [skipUpdate
 	s.mouseLoc.h = thumbPos + info.h_off
 	s.mouseLoc.v =  8 + info.v_off
 	s.eventCode = kCCE_mouseup
-	s.eventMod =0
+	s.eventMod = 0
 	if (skipUpdate)
-		s.eventMod = s.eventMod | 8
+		s.eventMod = 8
 	endif
 	MinMaxSlider_thumbFunc(s)		// call MinMaxSlider_thumbFunc with structure we made
 	// reset thumb down in info struct, and write edited info back to control user data
@@ -3732,7 +3734,6 @@ Function MinMaxSlider_thumbFunc(s)
 				funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
 				FUNCREF guipprotoFuncVVVV actionFunc = $funcName
 				actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
-				//print "kCCE_mouseup"
 			endif
 			s.needAction= 1
 			info.thumbDown = 0
@@ -3766,7 +3767,6 @@ Function MinMaxSlider_thumbFunc(s)
 					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
 					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
 					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
-					//print "kCallMouseMoved"
 				endif
 				StructPut/S info,s.userdata	// will be written out to control
 				s.needAction= 1
@@ -3793,8 +3793,7 @@ End
 
 // ************************** example action function ***************************************
 // last modified 2025/07/17 by Jamie Boyd
-// My action function runs when the slider adjusts a value. It prints the value.  Not very interesting,
-// but your action function could do a lot more
+// My action function. It prints the value. Not very interesting, but your action function could do a lot more
 function myAction (leftThumb, rightThumb, event, thumb)
 	variable leftThumb		// value left thumb is pointing to
 	variable rightThumb	// value right thumb is pointing to
@@ -3813,7 +3812,7 @@ end
 function MMS_Test()
 	newpanel /N=MMS_testpanel
 	string panelName = S_name
-	MinMaxSlider_make (panelName, "MMslider", 10, 50, 200, 0, 4095, 5, 0, "myAction", 3)
+	MinMaxSlider_make (panelName, "MMslider", 10, 50, 200, 0, 4095, 5, 0, "myAction", 1)
 end
 
 

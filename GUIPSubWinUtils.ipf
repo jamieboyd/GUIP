@@ -1,7 +1,7 @@
 #pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3
 #pragma IgorVersion= 6.1
-#pragma version= 3.0		//last modified 2025/07/30 by Jamie Boyd
+#pragma version= 3.0		//last modified 2026/06/25 by Jamie Boyd
 
 // Provides some tools to deal with fitting graph subwindows within a host window:
 // in a matrix of a defined number of columns and rows
@@ -163,7 +163,7 @@ end
 // User code calls this function to make a new host graph, providing a GUIPSubWin_UtilStruct
 // containing a GUIPSubWin_ContentStruct for each subwindow to be added
 // Last Modified:
-// 2025/07/29 by Jamie Boyd - using struct for info and masterX/Y for getting Igor to maintian proper aspect ratio
+// 2026/06/26 by Jamie Boyd - set mode of popmenus to reflect choces passed in from GUIPSubWin_UtilStruct 
 function GUIPSubWin_Display (us)
 	STRUCT GUIPSubWin_UtilStruct &us
 	// make sure packages folder exists
@@ -246,14 +246,21 @@ function GUIPSubWin_Display (us)
 	SetActiveSubwindow ##
 	NewPanel/k=2/HOST=#/EXT=3/W=(0,50,400,0)  as "Controls"
 	PopupMenu arrangePopup,pos={230.00,2.00},size={157.00,19.00},bodyWidth=120,proc=GUIPSubWin_ArrangePopMenuProc
-	PopupMenu arrangePopup,title="Matrix",fSize=12
-	PopupMenu arrangePopup,mode=1,popvalue="1 Column x 1 Row",value=#"GUIPSubWin_ListArrangments()"
+	PopupMenu arrangePopup,title="Matrix",fSize=12, value=#"GUIPSubWin_ListArrangments(theGraph=\"twoPscanGraph\")"
+	PopupMenu arrangePopup, mode = GUIPSubWin_WhichArrangement (us.nCols, us.nRows)
 	Button fullScaleButton,pos={222.00,25.00},size={60.00,20.00},proc=GUIPSubWinFullScaleProc
 	Button fullScaleButton,title="Full Scale",fSize=12
-	PopupMenu SetResizePopMenu,pos={289.00,26.00},size={105.00,19.00},bodyWidth=76,proc=GUIPSubWin_ResizePopMenuProc
-	PopupMenu SetResizePopMenu,title="Resize",fSize=12
-	PopupMenu SetResizePopMenu,mode=3,popvalue="by Width",value=#"\"Free;by Height;by Width\""
-
+	PopupMenu SetResizePopMenu,pos={289.00,26.00},size={105.00,19.00},bodyWidth=76,fSize=12
+	PopupMenu SetResizePopMenu,title="Resize",proc=GUIPSubWin_ResizePopMenuProc,value=#"\"Free;by Height;by Width\""
+	if (us.holdAspect)
+		if (us.reSizeByWidth)
+			PopupMenu SetResizePopMenu,mode=3
+		else
+			PopupMenu SetResizePopMenu,mode=2
+		endif
+	else
+		PopupMenu SetResizePopMenu,mode=1
+	endif
 	RenameWindow #,controlPanel
 	SetActiveSubwindow ##
 end
@@ -345,6 +352,8 @@ function GUIPSubWin_Add (cs)
 			SetAxis /W= $cs.graphName + "#" + cs.subWin left info.yStart, info.yEnd
 			ModifyGraph/w= $cs.graphName + "#" + cs.subWin nticks=0,noLabel=2
 		endif
+			PopupMenu arrangePopup win=$cs.graphName +"#controlPanel", mode = GUIPSubWin_WhichArrangement (info.nCols, info.nRows, theGraphName=cs.graphName)
+
 	endif
 end
 
@@ -415,6 +424,7 @@ function GUIPSubWin_Remove (graphName, subWin)
 		ygraphEnd = min (0.999, (yGraphStart + yProp))
 		MoveSubWindow /w=$graphName + "#" +stringfromList (iSubWin, graphList, ";"), fnum=(xGraphStart,yGraphStart, xGraphEnd, ygraphEnd)
 	endfor
+	PopupMenu arrangePopup win=$graphName +"#controlPanel", mode = GUIPSubWin_WhichArrangement (info.nCols, info.nRows, theGraphName=graphName)
 End
 
 
@@ -549,22 +559,22 @@ End
 
 // *********************************************************************
 // Sets resize mode for host window 
-// reSizeMode = 1 to resize by width, with height set to maintain 1:1 aspect ratio
-// reSizeMode = 0 to resize by height, with width set to maintain 1:1 aspect ratio
-// resizeMode = -1 to NOT maintain 1:1 aspect ratio, and resize by height and width
-// Last Modified: 2025/07/30 by Jamie Boyd
+// reSizeMode = 3 to resize by width, with height set to maintain 1:1 aspect ratio
+// reSizeMode = 2 to resize by height, with width set to maintain 1:1 aspect ratio
+// resizeMode = 1 to NOT maintain 1:1 aspect ratio, and resize by height and width
+// Last Modified: 2026/06/26 by Jamie Boyd - update mode of popMenu to reflect choice
 Function GUIPSubWin_setResizeMode (GraphName, reSizeMode)
 	String GraphName
 	variable reSizeMode
 	
 	STRUCT GUIPSubWin_WinInfoStruct info
 	StructGet/S info, GetUserData (GraphName, "", "subwinUtil")
-	if (reSizeMode < 0)
+	if (reSizeMode == 1)
 		info.holdAspect =0
 		ModifyGraph/w=$GraphName width=0, height=0
 	else
 		info.holdAspect =1
-		info.reSizeByWidth = (reSizeMode > 0)
+		info.reSizeByWidth = (reSizeMode == 3)
 		if (info.reSizeByWidth)
 			ModifyGraph/w=$GraphName width=0, height={Plan,(((info.yEnd - info.yStart) * info.nRows)/((info.xend - info.xStart) * info.nCols)),left,bottom}
 		else
@@ -574,16 +584,25 @@ Function GUIPSubWin_setResizeMode (GraphName, reSizeMode)
 	string infoStr
 	structPut/S info, infoStr
 	SetWindow $GraphName userdata (subwinUtil) = infoStr
+
+	PopupMenu SetResizePopMenu win = $GraphName + "#controlPanel" , mode = reSizeMode
 end
 
 
 //*************************************************************************************************
 //returns a list of possible arrangements of subwindows based on the number of subwindows
 // Last Modified:
+// 2026/06/26 by Jamie Boyd - added default parameter for graph, else uses top graph
 // 2025/07/30 by Jamie Boyd - made loop to list possible ways of arranging with no limit
-Function/S  GUIPSubWin_ListArrangments ()
+Function/S  GUIPSubWin_ListArrangments ([theGraph])
+	string theGraph
+	if (paramisdefault(theGraph))
+		theGraph=""
+	endif
+	
+	
 	string arrangeStr = ""
-	variable nSubWins = itemsinlist (RemoveFromList("controlPanel", childwindowList (""), ";", 0), ";")
+	variable nSubWins = itemsinlist (RemoveFromList ("P0", RemoveFromList("controlPanel", childwindowList (theGraph), ";", 0)))
 	if (nSubWins == 0)
 		arrangeStr = "\\M1(No subWindows."
 	elseif (nSubWins == 1)
@@ -607,6 +626,32 @@ Function/S  GUIPSubWin_ListArrangments ()
 		endfor
 	endif
 	return arrangeStr
+end
+
+
+//*************************************************************************************************
+//returns position in arrangeList (see above) of a particular number of columns and rows
+// or NaN if requested combo of rows/colmns is not possible
+// Last Modified:
+// 2026/06/26 by Jamie Boyd
+Function GUIPSubWin_WhichArrangement (nCols, nRows, [theGraphName])
+	variable nCols, nRows
+	string theGraphName
+	
+	if (paramIsDefault(theGraphName))
+		theGraphName= ""
+	endif
+	string str2match
+	sprintf str2match, "%d Col*x* %d Row*", nCols, nRows
+	string arrangeList= GUIPSubWin_ListArrangments (theGraph =theGraphName)
+	variable iList,nList = itemsinlist(arrangeList, ";")
+	for (iList=0; iList < nList;iList +=1)
+		
+		if (stringMatch (StringFromList(iList, arrangeList, ";"), str2match))
+			return (iList + 1) // because pop menu lists index from 1
+		endif
+	endfor
+	return NaN
 end
 
 //*************************************************************************************************
@@ -664,7 +709,7 @@ Function GUIPSubWin_ResizePopMenuProc(pa) : PopupMenuControl
 	switch( pa.eventCode )
 		case 2: // mouse up
 			string graphName = stringfromlist (0, pa.win, "#")
-			GUIPSubWin_setResizeMode (graphName, pa.popNum-2)
+			GUIPSubWin_setResizeMode (graphName, pa.popNum)
 			break
 		case -1: // control being killed
 			break

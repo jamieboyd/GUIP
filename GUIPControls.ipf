@@ -1,8 +1,9 @@
 #pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3		// Use modern global access method.
 #pragma IgorVersion=6.1
-#pragma version = 1.02		//	Last Modified: 2026/06/19 by Jamie Boyd added extra option for MinMax slider
-
+#pragma version = 1.03
+//	Modified: 2026/06/26 by Jamie Boyd better handling of sliders moving together
+//	Modified: 2026/06/19 by Jamie Boyd added extra option for MinMax slider
 // Modified: 2025/08/15 by Jamie Boyd added MinMax slider
 // Modified: 2025/07/10 by Jamie Boyd - updated GUIPSIsetVar functions
 #pragma ModuleName= GUIPControls
@@ -3602,7 +3603,8 @@ end
 
 // *************************************** MinMaxSlider_Manual **************************************
 //  Sets the position of a thumb to a chosen value, calling the update function
-// Last Modifies: 2025/07/20 by Jamie Boyd removed errant print statement
+// Last Modified: 2026/06/19 by Jamie Boyd added optional skipUpdate parameter
+// Modified: 2025/07/20 by Jamie Boyd removed errant print statement
 Function MinMaxSlider_Manual (thePanel, theSlider, theThumb, theVal, [skipUpdate])
 	string thePanel, theSlider
 	variable theThumb, theVal
@@ -3658,7 +3660,7 @@ end
 
 // *************************************** MinMaxSlider_getThumbVal **************************************
 //  Gets the position of a thumb
-// Last Modifiesd 2027/07/20 by Jamie Boyd - initial version
+// Last Modifiesd 2025/07/20 by Jamie Boyd - initial version
 Function MinMaxSlider_getThumbVal (thePanel, theSlider, theThumb)
 	string thePanel, theSlider
 	variable theThumb
@@ -3677,7 +3679,9 @@ end
 // *************************** MinMaxSlider_thumbFunc ****************************
 // function for MinMaxSlider - does all the usual slider things. Just twice
 // also prevents Min and Max values from crossing
-// last Modified 2025/07/20 by Jmaie Boyd - made scale line thicker and grey
+// Last Modified 2026/06/26 by Jamie Boyd - call action procedure with both thumbs set when needed
+// Modified 2026/06/19 by Jamie Boyd - cmd/ctrl to redraw thumb but not call action procedure
+// Modified 2025/07/20 by Jamie Boyd - made scale line thicker and grey
 Function MinMaxSlider_thumbFunc(s)
 	STRUCT WMCustomControlAction &s
 
@@ -3733,7 +3737,7 @@ Function MinMaxSlider_thumbFunc(s)
 			if (info.thumbDown && (info.callWhen & kCallMouseUp) && (!(s.eventMod & 8)))
 				funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
 				FUNCREF guipprotoFuncVVVV actionFunc = $funcName
-				actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
+				actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseUp, info.thumbDown)
 			endif
 			s.needAction= 1
 			info.thumbDown = 0
@@ -3747,6 +3751,7 @@ Function MinMaxSlider_thumbFunc(s)
 			break
 
 		case kCCE_mousemoved:
+			variable otherThumb = 0
 			StructGet/S info, s.userdata
 			s.mouseLoc.h -= info.h_off
 			s.mouseLoc.v -= info.v_off
@@ -3761,12 +3766,13 @@ Function MinMaxSlider_thumbFunc(s)
 				if (info.L_thumbPos >= info.R_thumbPos - 4)
 					info.R_thumbPos = info.L_thumbPos + 4
 					info.R_thumbVal = info.scaleValMin + (info.R_thumbPos - info.scalePosStart ) * info.ValPerPos
+					otherThumb = kRightThumb
 				endif
 				info.L_thumbPos_prev = s.mouseLoc.h
 				if ((info.callWhen & kCallMouseMoved) && (!(s.eventMod & 8)))
 					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
 					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
-					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
+					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown + otherThumb)
 				endif
 				StructPut/S info,s.userdata	// will be written out to control
 				s.needAction= 1
@@ -3776,12 +3782,13 @@ Function MinMaxSlider_thumbFunc(s)
 				if (info.R_thumbPos <= info.L_thumbPos + 4)
 					info.L_thumbPos = info.L_thumbPos -4
 					info.L_thumbVal = info.scaleValMin + (info.L_thumbPos - info.scalePosStart ) * info.ValPerPos
+					otherThumb = kLeftThumb
 				endif
 				info.R_thumbPos_prev = s.mouseLoc.h
 				if ((info.callWhen & kCallMouseMoved) && (!(s.eventMod & 8)))
 					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
 					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
-					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown)
+					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown + otherThumb)
 				endif
 				StructPut/S info,s.userdata	// will be written out to control
 				s.needAction= 1
@@ -3800,10 +3807,17 @@ function myAction (leftThumb, rightThumb, event, thumb)
 	variable event			// type of event (thumb up or thumb moved
 	variable thumb			// 1 if a left thumb was just moved or 2 for a right thumb
 	
-	if (thumb == kLeftThumb)
+	if (thumb & kLeftThumb)
 		printf "left Thumb moved to %.2f\r", leftThumb
-	elseif (thumb == kRightThumb)
+		if (event == kCallMouseUp)
+			print "Left Thumb Up."
+		endif
+	endif
+	if (thumb & kRightThumb)
 		printf "right Thumb  moved to %.2f\r", rightThumb
+		if (event == kCallMouseUp)
+			print "Right Thumb Up."
+		endif
 	endif
 end
 
@@ -3812,9 +3826,8 @@ end
 function MMS_Test()
 	newpanel /N=MMS_testpanel
 	string panelName = S_name
-	MinMaxSlider_make (panelName, "MMslider", 10, 50, 200, 0, 4095, 5, 0, "myAction", 1)
+	MinMaxSlider_make (panelName, "MMslider", 10, 50, 200, 0, 4095, 5, 0, "myAction", kCallMouseMoved + kCallMouseUp)
 end
-
 
 
 

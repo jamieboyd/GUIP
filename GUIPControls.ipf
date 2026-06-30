@@ -3613,12 +3613,10 @@ Function MinMaxSlider_Manual (thePanel, theSlider, theThumb, theVal, [skipUpdate
 	if (ParamIsDefault(skipUpdate))
 		skipUpdate = 0
 	endif
-	
-	// get user data from cobtrol, put into info struct
+	// get user data from control, put into info struct
 	STRUCT MinMaxSliderInfo info
-	//controlinfo/w=$thePanel $theSlider
 	StructGet/S info, GetUserData(thePanel, theSlider, "" )
-	// check bounds
+	// sanity checks
 	if ((theThumb != kLeftThumb) && (theThumb != kRightThumb))
 		return 1
 	endif

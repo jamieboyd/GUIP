@@ -699,6 +699,20 @@ Function GUIPSubWin_ArrangePopMenuProc(pa) : PopupMenuControl
 	return 0
 End
 
+//*************************************************************************************************
+// Sets the data associated with the graph for preference when adding subwindows to add a column or a row
+//Last Modified 2026/07/02 by Jamie Boyd
+function GUIPSubWin_SetColPref(GraphName, prefColsNotRows)
+	string graphName
+	variable prefColsNotRows
+	
+	STRUCT GUIPSubWin_WinInfoStruct info
+	StructGet/S info, GetUserData (GraphName, "", "subwinUtil")
+	info.prefMoreCols = prefColsNotRows
+	string infoStr
+	structPut/S info, infoStr
+	SetWindow $GraphName userdata (subwinUtil) = infoStr
+end
 
 //*************************************************************************************************
 // popmenu proc that sets the resize mode for the host window, by width, by height, or free

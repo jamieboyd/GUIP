@@ -626,7 +626,6 @@ Function GUIPTabAddCtrlToTabs (tabWinStr, tabControlStr, controlSpec, tabList)
 	
 	string ControlType =  stringFromList (0, controlSpec, " ")
 	string ControlName = stringFromList (1, controlSpec, " ")
-	if (GuipControls#GUIPTabCheckControlType (ControlType))
 		printf "Control Type for %s was an invalid value, %s.\r", ControlName, ControlType
 		return 1
 	endif
@@ -3734,8 +3733,6 @@ Function MinMaxSlider_thumbFunc(s)
 			StructGet/S info, s.userdata
 			if (info.thumbDown && (info.callWhen & kCallMouseUp) && (!(s.eventMod & 8)))
 				funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
-				FUNCREF guipprotoFuncVVVV actionFunc = $funcName
-				actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseUp, info.thumbDown)
 			endif
 			s.needAction= 1
 			info.thumbDown = 0
@@ -3769,8 +3766,6 @@ Function MinMaxSlider_thumbFunc(s)
 				info.L_thumbPos_prev = s.mouseLoc.h
 				if ((info.callWhen & kCallMouseMoved) && (!(s.eventMod & 8)))
 					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
-					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
-					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown + otherThumb)
 				endif
 				StructPut/S info,s.userdata	// will be written out to control
 				s.needAction= 1
@@ -3785,8 +3780,6 @@ Function MinMaxSlider_thumbFunc(s)
 				info.R_thumbPos_prev = s.mouseLoc.h
 				if ((info.callWhen & kCallMouseMoved) && (!(s.eventMod & 8)))
 					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
-					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
-					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown + otherThumb)
 				endif
 				StructPut/S info,s.userdata	// will be written out to control
 				s.needAction= 1
@@ -3797,9 +3790,7 @@ Function MinMaxSlider_thumbFunc(s)
 End
 
 // ************************** example action function ***************************************
-// last modified 2025/07/17 by Jamie Boyd
 // My action function. It prints the value. Not very interesting, but your action function could do a lot more
-function myAction (leftThumb, rightThumb, event, thumb)
 	variable leftThumb		// value left thumb is pointing to
 	variable rightThumb	// value right thumb is pointing to
 	variable event			// type of event (thumb up or thumb moved
@@ -3824,7 +3815,6 @@ end
 function MMS_Test()
 	newpanel /N=MMS_testpanel
 	string panelName = S_name
-	MinMaxSlider_make (panelName, "MMslider", 10, 50, 200, 0, 4095, 5, 0, "myAction", kCallMouseMoved + kCallMouseUp)
 end
 
 

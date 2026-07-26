@@ -3677,6 +3677,7 @@ end
 // *************************** MinMaxSlider_thumbFunc ****************************
 // function for MinMaxSlider - does all the usual slider things. Just twice
 // also prevents Min and Max values from crossing
+// Modified 2025/07/26 by Jamie Boyd - pass control name and event mods to action procedure
 // Last Modified 2026/06/26 by Jamie Boyd - call action procedure with both thumbs set when needed
 // Modified 2026/06/19 by Jamie Boyd - cmd/ctrl to redraw thumb but not call action procedure
 // Modified 2025/07/20 by Jamie Boyd - made scale line thicker and grey
@@ -3734,8 +3735,8 @@ Function MinMaxSlider_thumbFunc(s)
 			StructGet/S info, s.userdata
 			if (info.thumbDown && (info.callWhen & kCallMouseUp) && (!(s.eventMod & 8)))
 				funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
-				FUNCREF guipprotoFuncVVVV actionFunc = $funcName
-				actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseUp, info.thumbDown)
+				FUNCREF mySliderAction actionFunc = $funcName
+				actionFunc (s.ctrlName, info.L_thumbval, info.R_thumbval, kCallMouseUp, info.thumbDown, s.eventMod)
 			endif
 			s.needAction= 1
 			info.thumbDown = 0
@@ -3769,8 +3770,8 @@ Function MinMaxSlider_thumbFunc(s)
 				info.L_thumbPos_prev = s.mouseLoc.h
 				if ((info.callWhen & kCallMouseMoved) && (!(s.eventMod & 8)))
 					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
-					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
-					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown + otherThumb)
+					FUNCREF mySliderAction actionFunc = $funcName
+					actionFunc (s.ctrlName, info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown + otherThumb, s.eventMod)
 				endif
 				StructPut/S info,s.userdata	// will be written out to control
 				s.needAction= 1
@@ -3785,8 +3786,8 @@ Function MinMaxSlider_thumbFunc(s)
 				info.R_thumbPos_prev = s.mouseLoc.h
 				if ((info.callWhen & kCallMouseMoved) && (!(s.eventMod & 8)))
 					funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
-					FUNCREF guipprotoFuncVVVV actionFunc = $funcName
-					actionFunc (info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown + otherThumb)
+					FUNCREF mySliderAction actionFunc = $funcName
+					actionFunc (s.ctrlName, info.L_thumbval, info.R_thumbval, kCallMouseMoved, info.thumbDown + otherThumb, s.eventMod)
 				endif
 				StructPut/S info,s.userdata	// will be written out to control
 				s.needAction= 1
@@ -3797,13 +3798,15 @@ Function MinMaxSlider_thumbFunc(s)
 End
 
 // ************************** example action function ***************************************
-// last modified 2025/07/17 by Jamie Boyd
+// last modified 2026/07/26 by Jamie Boyd - includes new control name and and eventMod arguments
 // My action function. It prints the value. Not very interesting, but your action function could do a lot more
-function myAction (leftThumb, rightThumb, event, thumb)
+function mySliderAction (ctrlName, leftThumb, rightThumb, event, thumb, eventMod)
+	string ctrlName			// name of the slider control that called this function
 	variable leftThumb		// value left thumb is pointing to
 	variable rightThumb	// value right thumb is pointing to
 	variable event			// type of event (thumb up or thumb moved
 	variable thumb			// 1 if a left thumb was just moved or 2 for a right thumb
+	variable eventMod		// from s.eventMod, bit 1 for shift and bit 2 for option key pressed are most useful
 	
 	if (thumb & kLeftThumb)
 		printf "left Thumb moved to %.2f\r", leftThumb
@@ -3824,7 +3827,7 @@ end
 function MMS_Test()
 	newpanel /N=MMS_testpanel
 	string panelName = S_name
-	MinMaxSlider_make (panelName, "MMslider", 10, 50, 200, 0, 4095, 5, 0, "myAction", kCallMouseMoved + kCallMouseUp)
+	MinMaxSlider_make (panelName, "MMslider", 10, 50, 200, 0, 4095, 5, 0, "mySliderAction", kCallMouseMoved + kCallMouseUp)
 end
 
 

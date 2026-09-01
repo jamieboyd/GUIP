@@ -2,6 +2,7 @@
 #pragma rtGlobals=3		// Use modern global access method.
 #pragma IgorVersion=6.1
 #pragma version = 1.03
+//	Modified: 2026/08/31 by Jamie Boyd added another method for 3-position toggle switch
 //	Modified: 2026/06/26 by Jamie Boyd better handling of sliders moving together
 //	Modified: 2026/06/19 by Jamie Boyd added extra option for MinMax slider
 // Modified: 2025/08/15 by Jamie Boyd added MinMax slider
@@ -2997,12 +2998,23 @@ static constant kCCE_drawOSBM= 17			// draw off screen BitMap (draw stuff that i
 // ****************************** Three Position Toggle Switch *************************
 // uses a procedure pic with 9 frames (3 button positions x 3 states)
 
-// Data structure for 3 position togggle switch
+// Data structure for 3 position toggle switch
 Static Structure ToggleInfo
 	Int32 thePos		// current Position (0, 1, or 2)
 	Int32 direction		//  Going down =0, going up =1
 	Int32 disabled		//set if control is disabled
 	Int32 mouseDown    // set if mouse down in control
+EndStructure
+
+
+// Data structure for 3 position toggle switch with ToggleFunc1
+Static Structure ToggleInfo1
+	int16 v_1				// 43/3 =14 for big size, 32/3= 11 for medium, 22/3 =7 for small
+	int16 v_2				// 29 for big size, 21 for medium, 15 for small
+	Int32 togglePos		// current Position (0, 1, or 2)
+	Int32 disabled		//set if control is disabled
+	Int32 mouseDown    // set if mouse down in control
+	
 EndStructure
 
 // *******************************************************************
@@ -3068,13 +3080,92 @@ Static Function ToggleFunc(s)
 	return 0
 End
 
+Static Function toggle1FillStruct (thePanel, theToggle, userFunction)
+	string thePanel
+	string theToggle
+	string userFunction
+	
+	STRUCT ToggleInfo1 info
+	controlinfo/w=$thePanel $theToggle
+	info.v_1 = V_top + V_Height/3
+	info.v_2 = V_top + (2*V_Height)/3
+	info.togglePos = 0
+	string newUserdata				// write info struct to a string, and write the string to the main user data of the control
+	StructPut/S info,newUserdata
+	customcontrol $theToggle win = $thePanel, userdata = newUserdata
+	customcontrol $theToggle win = $thePanel, userdata(FUNCSTR)=userFunction
+	end
+
+
+// *******************************************************************
+// custom control function for the 3-position switch
+// Last Modified 2025/07/18 by Jamie Boyd
+Static Function ToggleFunc1(s)
+	STRUCT WMCustomControlAction &s
+		
+	STRUCT ToggleInfo1 info
+	switch (s.eventCode)
+		case kCCE_frame: // calculate the correct frame, read it to the WMCustomControlAction struct
+			StructGet/S info, s.userdata
+			s.curFrame = 3*info.togglePos // start at the  "normal" frame for the position
+			if (info.disabled == 1)  // disabled frame is "normal" frame + 2
+				s.curFrame +=2
+			else // mouse down position is 1 past normal frame
+				s.curFrame += info.mouseDown
+			endif
+			break
+		case kCCE_mousedown: // mouse down
+			StructGet/S info,s.userdata
+			info.mouseDown =1  // set mouseDown bit in ToggleInfo struct
+			StructPut/S info,s.userdata
+			break
+		case kCCE_mouseup_out: // mouse up outside of control 
+			StructGet/S info, s.userdata
+			info.mouseDown =0  // un-set mouseDown bit in ToggleInfo struct
+			StructPut/S info, s.userdata
+			break
+		case kCCE_mouseup:  // mouse up 
+			StructGet/S info,s.userdata
+			info.mouseDown =0 
+			if (s.eventMod & 2) // shift key was pressed, flip enabled state
+				if (info.disabled ==1)
+					info.disabled =0
+				else
+					info.disabled =1
+				endif
+			elseif (info.disabled ==0) // normal mouse-up and control is enabled
+				if (s.mouseLoc.v > info.v_2)
+					info.togglePos = 2
+				elseif  (s.mouseLoc.v > info.v_1)
+					info.togglePos = 1
+				else
+					info.togglePos = 0
+				endif
+			endif
+			// if a variable has been attached to this control, update it
+			if (s.isVariable)
+				s.nVal = 2 - info.togglePos		// we like the variable to be 0 at the lowest switch position, and 2 at the top
+			endif
+			string funcName = getuserdata (s.win, s.ctrlname, "FUNCSTR")
+			if (cmpStr (funcName, "") != 0)
+				FUNCREF GUIPprotoFuncVS toggleFunc = $funcName
+				toggleFunc (s.nVal, s.ctrlName)
+			endif
+			StructPut/S info, s.userdata
+			
+	endSwitch
+	return 0
+End
+
+
 // ****************************************************************************************
 // makes a panel demonstrating the switch
 function ToggleSwitchTest ()
 	Variable/G root:BigSwitchVal, root:MediumSwitchVal, root:LittleSwitchVal
 	NewPanel/N = ToggleSwitchTest/W=(374,125,440,247)
-	CustomControl ccToggle1, pos={10,10},size={48,43},focusRing=0,proc=GUIPControls#ToggleFunc
-	CustomControl ccToggle1, userdata= A"zzz",picture= {GUIPControls#Toggle3PosVertTall,9}
+	CustomControl ccToggle1, pos={10,10},size={48,43},focusRing=0,proc=GUIPControls#ToggleFunc1
+	CustomControl ccToggle1 picture= {GUIPControls#Toggle3PosVertTall,9}
+	toggle1FillStruct (S_name, "ccToggle1", "myToggleFunc")
 	CustomControl ccToggle1, value = root:BigSwitchVal
 	CustomControl ccToggle2, pos={11,58},size={36,32},focusRing=0,proc=GUIPControls#ToggleFunc
 	CustomControl ccToggle2, userdata= A"zzz",picture= {GUIPControls#Toggle3PosVertMedium,9}
@@ -3083,6 +3174,14 @@ function ToggleSwitchTest ()
 	CustomControl ccToggle3, userdata= A"zzz", picture= {GUIPControls#Toggle3PosVertShort,9}
 	CustomControl ccToggle3, value= root:LittleSwitchVal
 EndMacro
+
+
+function myToggleFunc (toggleVal, controlName)
+	variable toggleVal
+	string controlName
+	
+	printf "The value of the big toggle switch is %d\r", toggleVal
+end
 
 // ************************ Procedure Pictures for Toggle Switch*****************
 //Vertically oriented 3 position toggle switch. 3 positions plus mouse-down and disabled for each position = 9 pictures

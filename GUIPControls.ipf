@@ -3011,7 +3011,7 @@ Static Structure ToggleInfo
 EndStructure
 
 
-Static Function toggleFillStruct (thePanel, theToggle, userFunction)
+Function toggleFillStruct (thePanel, theToggle, userFunction)
 	string thePanel
 	string theToggle
 	string userFunction
@@ -3111,7 +3111,7 @@ EndStructure
 // ***************************************************************************************
 // uses data from controlinfo to fill the info struct for the toggle Switch
 // run this function before using the toggle switch, and re-run it after re-positoning toggle switch on the panel
-Static Function toggle1FillStruct (thePanel, theToggle, userFunction)
+Function toggle1FillStruct (thePanel, theToggle, userFunction)
 	string thePanel
 	string theToggle
 	string userFunction

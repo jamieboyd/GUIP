@@ -71,6 +71,7 @@ Function GUIPWinPosAbs (theWindow, hWhere, vWhere, [theScreen, minWidth, minHeig
 	variable vWhere // 0 is top, 1 is center, 2 is bottom
 	variable theScreen // only used on Macintosh.
 	variable minWIdth, minHeight, maxWidth, maxHeight // can scrunch size of a window to a max width/height
+	
 	variable/G WinPos_Left = Nan,  WinPos_Top = Nan, WinPos_Right = Nan, WinPos_Bottom = Nan
 	// Check for A) moving command window, B) a top window if moving top window, C) the given window exists
 	variable isCommandWin = 0

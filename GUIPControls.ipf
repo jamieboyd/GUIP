@@ -11,7 +11,7 @@
 
 #include "GUIPList"
 #include "GUIPprotoFuncs"
-#include "GUIPMath"
+#include "GUIPBinarySearch"
 
 //********************************************************************************************************
 //**********************************************GUIPSetVar**************************************************
@@ -595,7 +595,7 @@ Function GUIPTabAddCtrls (tabWinStr, tabControlStr, tabStr, ctrlList, [applyAble
 		if (numtype (aCtrlAble) != 0)
 			aCtrlAble = 0
 		endif
-		insertPos = GUIPMathFindText (ctrlNames, aControl, 0, inf, 0)
+		insertPos = GUIPBinarySearchText (ctrlNames, aControl, 0, inf, 0)
 		if (insertPos < 0) // control not already added
 			insertPos = -(insertPos +1) 
 			insertpoints insertPos, 1, ctrlNames, ctrlTypes, ctrlAbles
@@ -653,7 +653,7 @@ Function GUIPTabAddCtrlToTabs (tabWinStr, tabControlStr, controlSpec, tabList)
 			
 		endif
 
-		insertPos = GUIPMathFindText (ctrlNames, ControlName, 0, inf, 0)
+		insertPos = GUIPBinarySearchText(ctrlNames, ControlName, 0, inf, 0)
 		if (insertPos < 0) // control not already added
 			insertPos = -(insertPos +1) 
 			insertpoints insertPos, 1, ctrlNames, ctrlTypes, ctrlAbles
@@ -759,7 +759,7 @@ Function GUIPTabRemoveControls (tabWinStr, tabControlStr, tabList, ctrlList, Mod
 		for (iControl =0; iControl < nControls; iControl +=1)
 			aControl = stringFromList (iControl, ctrlList, ";")
 			// find control
-			controlPos = GUIPMathFindText (ctrlNames, aControl, 0, inf, 0)
+			controlPos = GUIPBinarySearchText(ctrlNames, aControl, 0, inf, 0)
 			if (controlPos >= 0) // control is in database for this tab
 				// first time through, delete control from control panel, if requested
 				if ((itab ==0) && (modTabControl))
@@ -816,7 +816,7 @@ Function GUIPTabSetAbleState (tabWinStr, tabControlStr, tabList, ctrlList, ableS
 		endif
 		for (iControl =0; iControl < nControls; iControl +=1)
 			aControl = stringFromList (iControl, ctrlList, ";")
-			ctrlPos = GUIPMathFindText (ctrlNames, aControl, 0, inf, 0)
+			ctrlPos = GUIPBinarySearchText(ctrlNames, aControl, 0, inf, 0)
 			if (ctrlPos  >= 0) // control is shown for this tab
 				ctrlAbles [ctrlPos] = ableState
 				if  (modTabControl)
@@ -859,7 +859,7 @@ Function GUIPTabRenameControl (tabWinStr, tabControlStr, oldControlName, newCont
 			return 1
 		endif
 		// look for control name on this tab
-		tabPos = GUIPMathFindText (ctrlNames, oldControlName, 0, inf, 0)
+		tabPos = GUIPBinarySearchText (ctrlNames, oldControlName, 0, inf, 0)
 		// if we found it, rename it, and re-sort the database waves
 		if (tabPos >= 0)
 			ctrlNames [tabPos] = newControlName
@@ -916,7 +916,7 @@ Function GUIPTabRemoveTab(tabWinStr, tabControlStr, tabStr, ModTabControl)
 			aControl = ctrlNames [iControl]
 			for (iTab =0; iTab < nTabs; iTab +=1)
 				wave otherTabControlNames = $folderPath + PossiblyQuoteName (stringFromList (iTab, tabStr)) + "_ctrlNames"
-				otherTabPos =  GUIPMathFindText (otherTabControlNames, aControl, 0, inf, 0)
+				otherTabPos =  GUIPBinarySearchText(otherTabControlNames, aControl, 0, inf, 0)
 				if (otherTabPos > -1) // control is on another tab
 					break
 				endif
@@ -1387,7 +1387,7 @@ Static Function TabManPanelPopUpProc(pa) : PopupMenuControl
 					dbCtrlList = GUIPTabGetControlList (pa.popStr, aTabControl)
 					for (iControl =0, nDBcontrols = itemsInList (dbCtrlList, ";"); iControl < nDBcontrols; iControl +=1)
 						aControl = stringFromList (iControl, dbCtrlList, ";")
-						ctrlPos = GUIPMathFindText (control_list, aControl, 0, nControls-1, 0)
+						ctrlPos = GUIPBinarySearchText (control_list, aControl, 0, nControls-1, 0)
 						if (ctrlPos >= 0)
 							control_list [ctrlPos] [2] = aTabControl
 						else
@@ -2211,7 +2211,7 @@ STATIC Function GUIPTabKillTabControl (tabWinStr, tabControlStr, ModTabControl)
 					for (iOtherTab =iTab +1; iOtherTab < nTabs; iOtherTab += 1)
 						otherTabStr =  stringfromlist (iOtherTab, tabList, ";")
 						WAVE/z/T OtherCtrlNames = $folderPath + PossiblyQuoteName (otherTabStr) + "_ctrlNames"
-						OtherPos = GUIPMathFindText (OtherCtrlNames, aControl, 0, INF, 0)
+						OtherPos = GUIPBinarySearchText (OtherCtrlNames, aControl, 0, INF, 0)
 						if (otherPos > -1)
 							WAVE/z/T otherCtrlTypes = $folderPath + PossiblyQuoteName (otherTabStr) + "_ctrlTypes"
 							WAVE/z OtherCtrlAbles = $folderPath + PossiblyQuoteName (otherTabStr) + "_ctrlAbles"
@@ -2498,7 +2498,7 @@ Static Function/S GUIPTabCheckDataBase (tabWinStr, tabControlStr, theCtrl, addAb
 		if (!((waveExists (ctrlNames) && waveExists (ctrlTypes)) && waveExists (ctrlAbles)))
 			continue
 		endif
-		ctrlNum = GUIPMathFindText (ctrlNames, theCtrl, 0, inf, 0)
+		ctrlNum = GUIPBinarySearchText(ctrlNames, theCtrl, 0, inf, 0)
 		if (ctrlNum > -1)
 			tabListR += tabStr + ";"
 			if (addAbleState)

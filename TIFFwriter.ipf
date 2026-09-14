@@ -1,7 +1,6 @@
 #pragma rtGlobals=1		// Use modern global access method.
-#pragma version = 1		// Last Modified Aug 03 2010 by Jamie Boyd
+#pragma version = 1		// Last Modified 2026/09/12 by Jamie Boyd
 #pragma IgorVersion = 5.0
-#include "GUIPMath" 		// Used for the dec2frac function
 
 // Two functions to write greyscale and color TIFF images. ExportGreyScaleTIFF makes:
 // 1 - single greyscale image from a 2D wave
@@ -992,8 +991,13 @@ Function TiffWriterGetVariables (datawave, timeinSecs, imDims, inPutType, imWidt
 	ResDenominatorY=1
 	if (cmpStr (imUnits, "Inch") == 0)
 		ResolutionUnit = 2
-		GUIPdec2frac ((1/xPixSIze), ResNumeratorX,ResDenominatorX)
-		GUIPdec2frac ((1/yPixSIze), ResNumeratorY, ResDenominatorY)
+		RatioFromNumber/MITS=10/V=0 (1/xPixSize)
+		ResNumeratorX = V_numerator
+		ResDenominatorX = V_denominator
+		RatioFromNumber/MITS=10/V=0 (1/yPixSize)
+		ResNumeratorY = V_numerator
+		ResDenominatorY = V_denominator
+		// GUIPdec2frac ((1/yPixSIze), ResNumeratorY, ResDenominatorY)
 	elseif ((((cmpStr (imUnits, "m") == 0) || (cmpStr (imUnits, "cm") == 0)) || (cmpStr (imUnits, "mm") == 0)) || (cmpStr (imUnits, num2char (-75) + "m") == 0))
 		ResolutionUnit = 3
 		if (cmpStr (imUnits, "m") == 0)
@@ -1003,8 +1007,12 @@ Function TiffWriterGetVariables (datawave, timeinSecs, imDims, inPutType, imWidt
 		 elseif (cmpStr (imUnits, num2char (-75) + "m") == 0) // um
 		 	xPixSIze /= 10000;yPixSize /= 10000
 		 endif
-		GUIPdec2frac ((1/xPixSIze), ResNumeratorX,ResDenominatorX)
-		GUIPdec2frac ((1/yPixSIze), ResNumeratorY, ResDenominatorY)
+		RatioFromNumber/MITS=10/V=0 (1/xPixSize)
+		ResNumeratorX = V_numerator
+		ResDenominatorX = V_denominator
+		RatioFromNumber/MITS=10/V=0 (1/yPixSize)
+		ResNumeratorY = V_numerator
+		ResDenominatorY = V_denominator
 	endif
 	// string for date and time the format in a TIFF file is  "YYYY:MM:DD HH:MM:SS" plus null termination = 20 bytes
 	dateStr = Secs2Date(TimeInSecs,-2) [0,9]

@@ -1,7 +1,8 @@
 #pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3		// Use modern global access method.
 #pragma IgorVersion=6.1
-#pragma version = 1.03
+#pragma version = 1.1
+
 //	Modified: 2026/08/31 by Jamie Boyd added another method for 3-position toggle switch
 //	Modified: 2026/06/26 by Jamie Boyd better handling of sliders moving together
 //	Modified: 2026/06/19 by Jamie Boyd added extra option for MinMax slider
@@ -12,6 +13,382 @@
 #include "GUIPList"
 #include "GUIPprotoFuncs"
 #include "GUIPBinarySearch"
+
+
+//**********************************************GUIPSetVar2 **************************************************
+// GUIPSIsetVar2Proc is another SetVariable Proc for SI Prefixes, but WITHOUT using the Wavemetrics %w Conversion Specifier
+// The %w formatting specifier prints very large or small numbers in an easily readable manner using an SI prefix such as µ, m, k, M, etc
+// It would be nice to use this in a setvariable control, especially if a large range of numbers might be displayed. Unfortunately, the manual says:
+// "Never use leading text or the "%W" format for numbers, because Igor reads the value back without interpreting the extra text."
+// This procedure provides a way to get a similar effect, without using the "%W" specifier.
+
+// The approach is for the setvariable to display a shadow variable that tracks the real variable, but with an SI prefix applied, so if the real variable is .001V,
+// the shadow variable is 1 and is displayed in the setvariable with format "%.4g mV". When the shadow variable is updated in the Setvariable, the control procedure
+// updates the real variable accordingly. The shadow variable has a dependency applied so that when the real variable is changed, the shadow variable gets updated. 
+
+//		pressing command/ctrl when clicking on the setvariable means multiply the current setvariable increment by 10
+//		option/Alt means divide the increment by10 
+//		shift-command/ctrl means multiply by 100
+// 	shift-option/alt means divide by 100
+
+
+// Data structure for SI setvar
+Structure SIsetVar2Struct
+	uchar SIprefix				// current SI prefix
+	double multiplier			// multiplier corresponding to current SI prefix
+	uchar nDisplayDigits		// number of digits to display
+	double valMin				// minimum val variable can take, or -INF if no limit. In  base units, not SI
+	double valMax				// maximum val variable can take, or INF if no limit.  In not base units, not SI
+	double increment			// increment that is applied when up and down arrows are pressed.  In base units, not SI
+	double minIncrement			// minimum allowed increment, if autoIncrement is on. In base units, not SI
+	uchar adjustIncrement		// set automatically adjust increment
+EndStructure
+
+
+
+//*****************************************************************************************************
+// Modifies a setvariable control to use GUIPSIsetVarProc
+// Last Modified: 2026/11/17 by Jamie Boyd - first version
+function GUIPSIsetVar2Enable (panelName, setVariableName, addFuncStr, MinVal, MaxVal, MinIncr, adjustIncr, nDisplayDigits, unitStr, theVariablePath)
+	string panelName			// name of panel control is on, or empty string for topmost window
+	string setVariableName		// name of control
+	string addFuncStr			// name of additional setvariable function to run after adjusting value of variable, or "" if no function 
+	variable minVal				// minimum value variable can have, or -INF if no limit
+	variable maxVal				// maximum value variable can have, or INF if no limit
+	variable minIncr			// minimum increment allowed, useful if minVal and maxVal span 0. Or just the increment, if adjustIncr is 0
+	variable adjustIncr			// set to automatically adjust increment to 1% of current value
+	variable nDisplayDigits		// number of digits to display in the setvariable
+	string UnitStr				// base units of variable, e.g. s, m, Hz
+	string theVariablePath		// full path to the variable we want to link to
+	
+	
+	// reference the variable we are to control (theVar) - we are passed the path to the variable so make NVAR reference
+	// theVar is always kept in base units. 
+	NVAR/Z theVar = $theVariablePath
+	if (!(NVAR_EXISTS (theVar)))
+		doalert 0, "Requested variable " + theVariablePath + " does not exist."
+		return 1
+	endif
+	// make the shadow variable we display in the setvar, 
+	// value of the theVar = shadowVariable * info.multiplier
+	// value of shadowVariable = theVar / info.multiplier
+	NVAR/Z theShadowVar = $"root:packages:GUIP_shadows:" + panelName + ":" + setVariableName
+	if (!(NVAR_Exists(theShadowVar)))
+		if (!(dataFolderExists ("root:packages:GUIP_shadows:" + panelName)))
+			if (!(dataFolderExists ("root:packages:GUIP_shadows")))
+				if (!(dataFolderExists ("root:packages")))
+					newdataFolder root:packages
+				endif
+				newDataFolder root:packages:GUIP_shadows
+			endif
+			newDataFolder $"root:packages:GUIP_shadows:" + panelName
+		endif
+		Variable/G $"root:packages:GUIP_shadows:" + panelName + ":" + setVariableName
+		NVAR theShadowVar = $"root:packages:GUIP_shadows:" + panelName + ":" + setVariableName
+	endif
+	// needed info is stored in a struct in setvariable's INFO user data
+	struct SIsetVar2Struct info
+	info.nDisplayDigits = nDisplayDigits
+	// copy param for minIncrement, it is in base units
+	info.minIncrement = MinIncr
+	// copy param for auto adjusting increment
+	info.adjustIncrement = adjustIncr
+	// set increment as needed
+	if (adjustIncr)
+		info.adjustIncrement = 1
+		info.increment = GUIPSetVar2SetIncr(theVar, info.minIncrement)
+	else
+		info.adjustIncrement = 0
+		info.increment = minIncr
+	endif
+	info.valMin = minVal
+	info.valMax = maxVal
+	// set SI prefix and multiplier to base units to start, i.e. no SI prefix and mult = 1
+	info.SIprefix = char2num(" ")
+	info.multiplier = 1
+	GUIPSISetvar2SetSI (theVar, info)
+	// set dependency formula for shadowVar
+	setformula theShadowVar theVariablePath  + " / " + num2str (info.multiplier)
+	// copy the info structure into a string so it can be userdata for the setvariable
+	string infoStr
+	StructPut/S info, infoStr
+	// print format string for setvariable using SIprefix and base unit string
+	string formatStr
+	sprintf formatStr, "%%.%dg %c%s", info.nDisplayDigits, info.SIprefix, unitStr
+	// edit setvariable
+	SetVariable $setVariableName win=$panelName, proc=GUIPSIsetVar2Proc, value = theShadowVar, format=formatStr
+	SetVariable $setVariableName win=$panelName, userdata(INFO)=infoStr, userData(FUNCSTR)=addFuncStr, userData(UNITS)=unitStr, userData (PATH)=theVariablePath
+	SetVariable $setVariableName win=$panelName, limits={info.valMin/info.multiplier, info.valMax/info.multiplier, info.increment/info.multiplier}
+end
+
+
+Function GUIPSIsetVar2Proc(sva) : SetVariableControl
+	STRUCT WMSetVariableAction &sva
+
+	STRUCT WMSetVariableAction mysva
+	Struct SIsetVar2Struct info
+	String infoStr
+
+	switch (sva.eventCode)
+		case -1:			// -1 control being killed
+			// delete the associated shadow variable
+			NVAR theShadowVar = $"root:packages:GUIP_shadows:" + sva.win + ":" + sva.ctrlName
+			setformula theShadowVar ""
+			killvariables theShadowVar
+			break
+		case 3:			// 3 Live update - called for up and down arrows, and some other un-wanted events
+			if ((sva.mousePart == 1) || (sva.mousePart == 2)) 	// filters out unwanted events
+				// make a reference to the variable pointed to by the PATH user data
+				NVAR theVar = $GetUserData(sva.win, sva.ctrlName, "PATH")
+				// get the info structure from INFO user data
+				StructGet/S info, GetUserData(sva.win, sva.ctrlName, "INFO")
+				// check for modifiers for increment and update the variable
+				// updating the variable will cause a dependency update event where we will adjust setvariable appearance, if necessary
+				if ((sva.eventMod & 8) || (sva.eventMod & 4))// modifiers command/ctrl or option/alt
+					variable increment = info.increment
+					variable ctrlVal = sva.dval
+					if ((sva.eventMod & 10) == 10)  //mult by 100 
+						increment *= 100
+					elseif ((sva.eventMod & 6) == 6) // divide by 100
+						increment /= 100
+					elseif  (sva.eventMod & 8)  //mult by 10
+						increment *= 10
+					elseif  (sva.eventMod & 4)	// divide by 10
+						increment /= 10
+					endif
+					if (sva.mousePart == 1)
+						ctrlVal -= info.increment/info.multiplier
+						ctrlVal += increment/info.multiplier
+					elseif (sva.mousePart == 2)
+						ctrlVal += info.increment/info.multiplier
+						ctrlVal -= increment/info.multiplier
+					endif
+					theVar = ctrlVal * info.multiplier
+				else
+					theVar = sva.dval * info.multiplier
+				endif
+				if (abs(theVar) < 1e-21)
+					theVar = 0
+				endif
+				// run optional function
+				FUNCREF  GUIPprotoFuncVSS extraFunc = $GetUserData(sva.win, sva.ctrlName, "FUNCSTR") //reference to additional function to run, if any
+				extraFunc (theVar, sva.win, sva.ctrlName)
+			endif
+			break
+		case 8:			// 8 End Edit - called after an edit in the setvariable contents.
+			// make a reference to the variable pointed to by the path
+			NVAR theVar = $GetUserData(sva.win, sva.ctrlName, "PATH")
+			// get the info structure from INFO  user data
+			StructGet/S info, GetUserData(sva.win, sva.ctrlName, "INFO")
+			// parse string that user entered.
+			string ctrlValueStr		// value use typed, may contain exponent notation, in format like E3, e3, E-3, e-3
+			string ctrlSIPrefixStr	// SI prefix, what we care about
+			string ctrlBaseUnit		// not allowed to change, we compare and make sure user has not changed or omitted it
+			// use split string on what user typed. First pattern for the numeric value was from https://stackoverflow.com/questions/638565/parsing-scientific-notation-sensibly
+			String regExp = "(-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+\-]?\d+)?)(\s*[yzafpnuμµmkMGTPEZY]?)([[:alpha:]]+)"
+			SplitString /E=(regExp) sva.sval, ctrlValueStr, ctrlSIPrefixStr, ctrlBaseUnit
+			// sanity check the reaad value
+			variable ctrlValue = str2num (ctrlValueStr)
+			if (ctrlValue != sva.dval)
+				return 0
+			endif
+			// sanity check base unit, not including base unit is hint that user may have a typo
+			string baseUnit = GetUserData(sva.win, sva.ctrlName, "UNITS")
+			if (cmpStr (ctrlBaseUnit, baseUnit) != 0)
+				return 0
+			endif
+			// set SI prefix
+			variable ctrlSIPrefix
+			// if no SI prefix was found, using space as code for base units
+			if (strlen (ctrlSIPrefixStr) > 1)
+				ctrlSIPrefixStr = ctrlSIPrefixStr [strlen (ctrlSIPrefixStr) -1]
+			endif
+			if (cmpStr (ctrlSIPrefixStr, "") ==0)
+				ctrlSIPrefix =  char2num (" ")
+			else
+				ctrlSIPrefix = char2num (ctrlSIPrefixStr)
+			endif
+			// if SI prefix was changed, save in INFO user data
+			if (info.SIprefix  != ctrlSIPrefix)
+				info.SIprefix = ctrlSIPrefix
+				info.multiplier = GUIPSISetvar2MultFromPrefix (ctrlSIPrefix)
+			endif
+			StructPut/S info, infoStr
+			SetVariable $sva.ctrlname win=$sva.win, userdata(INFO)=infoStr
+			// set theVar, which will call dependency update
+			theVar = sva.dval * info.multiplier
+			
+			// run optional function
+			FUNCREF  GUIPprotoFuncVSS extraFunc = $GetUserData(sva.win, sva.ctrlName, "FUNCSTR") //reference to additional function to run, if any
+			extraFunc (theVar, sva.win, sva.ctrlName)
+			break
+		case 6:   // "6 Value changed by dependency update"
+			// get the info structure from INFO user data
+			StructGet/S info, GetUserData(sva.win, sva.ctrlName, "INFO")
+			// make a reference to the variable pointed to by the path
+			NVAR theVar = $GetUserData(sva.win, sva.ctrlName, "PATH")
+			GUIPSISetvar2SetSI (theVar, info)
+			if (info.adjustIncrement)
+				info.increment = GUIPSetVar2SetIncr(theVar, info.minIncrement)
+			endif
+			string formatStr = ""
+			sprintf formatStr, "%%.%dg %c%s", info.nDisplayDigits, info.SIprefix, GetUserData(sva.win, sva.ctrlName, "UNITS")
+			// copy the info structure into a string so it can be userdata for the setvariable
+			StructPut/S info, infoStr
+			SetVariable $sva.ctrlname win=$sva.win, limits={info.valMin/info.multiplier, info.valMax/info.multiplier, info.increment/info.multiplier}, format=formatStr, userdata(INFO)=infoStr
+			// re-set dependency formula for shadowVar
+			NVAR theShadowVar = $"root:packages:GUIP_shadows:" + sva.win + ":" + sva.ctrlName
+			setformula theShadowVar GetUserData(sva.win, sva.ctrlName, "PATH")  + " / " + num2str (info.multiplier)
+			break
+	endswitch
+	return 0
+end
+
+
+//*****************************************************************************************************
+// given a value, set SIprefix to the best fitting SI prefix and set mult to the corresponding power of 10.
+// if the value is 0, preserve the current SIPrefix
+// the shadowValue = theValueP/mult
+function GUIPSISetvar2SetSI(theValueP, info)
+	variable theValueP
+	STRUCT SIsetVar2Struct &info
+	
+	variable theValue = abs(theValueP)
+	// if the value is 0 and we have an SI prefix, preserve it.
+	// If the value is 0 and we don't have an SI prefix, use minIncrtement to set SI prefix
+	if (theValue == 0)
+		if (info.SIprefix == char2num (" "))
+			theValue = info.minIncrement
+		else
+			info.multiplier = GUIPSISetvar2MultFromPrefix (info.SIprefix)
+			return 0
+		endif
+	endif
+	
+	if (theValue >= 1E24)
+		info.SIprefix = char2num("Y")				// Y = Yotta
+		info.multiplier = 1E24
+	elseif (theValue >= 1E21)
+		info.SIprefix = char2num("Z")				// Z=Zetta
+		info.multiplier = 1E21
+	elseif (theValue >= 1E18)
+		info.SIprefix = char2num("E")				// E=Exa
+		info.multiplier = 1E18
+	elseif (theValue >= 1E15)
+		info.SIprefix =  char2num("P")				// P=Peta
+		info.multiplier = 1E15
+	elseif (theValue >= 1E12)
+		info.SIprefix = char2num("T")				// T=Tera
+		info.multiplier = 1E12
+	elseif (theValue >= 1E9)
+		info.SIprefix = char2num("G")				// G=Giga
+		info.multiplier = 1E9
+	elseif (theValue >= 1E6)
+		info.SIprefix = char2num("M")				// M = Mega
+		info.multiplier = 1E6
+	elseif (theValue >= 1E3)
+		info.SIprefix = char2num("k")				// k = kilo
+		info.multiplier = 1E3
+	elseif (theValue >= 1)
+		info.SIprefix = char2num(" ")				// base units, no prefix
+		info.multiplier = 1
+	elseif (theValue >= 1E-3)
+		info.SIprefix = char2num("m")				
+		info.multiplier = 1E-3
+	elseif (theValue >= 1E-6)
+		info.SIprefix = char2num("u")				// µ=micro
+		info.multiplier = 1E-6	
+	elseif (theValue >= 1E-9)
+		info.SIprefix = char2num("n")			// n=nano
+		info.multiplier = 1E-9
+	elseif (theValue >= 1E-12)
+		info.SIprefix =  char2num("p")				// p=pico
+		info.multiplier = 1E-12
+	elseif (theValue >= 1E-15)
+		info.SIprefix = char2num("f")				// f=femto	
+		info.multiplier = 1E-15
+	elseif (theValue >= 1E-18)
+		info.SIprefix = char2num("a")				// a=atto
+		info.multiplier = 1E-18
+	elseif (theValue >= 1E-21)
+		info.SIprefix = char2num("z")				// z=zepto
+		info.multiplier = 1E-21
+	else
+		info.SIprefix = char2num("y")				// y=yokto
+		info.multiplier = 1E-24
+	endif
+	return 0
+End
+
+function GUIPSetVar2SetIncr(theValue, minIncrement)
+	variable theValue
+	variable minIncrement
+	
+	return max (minIncrement, 10^(floor(log (abs (theValue))) -2)) 
+end
+
+
+function GUIPSISetvar2MultFromPrefix (SIprefix)
+	variable SIprefix
+
+	variable mult
+	switch (SIprefix)
+		case 32:		// space; i.e. no prefix
+			mult = 1
+			break
+		case 121:  //yokto
+			mult = 1e-24
+			break
+		case 122:  // z zepto
+			mult = 1e-21
+			break
+		case 97: // a  atto
+			mult = 1e-19
+			break
+		case 102:  // f  femto
+			mult = 1e-15
+			break
+		case 112: // p   pico
+			mult = 1e-12
+			break
+		case 110: // n  nano
+			mult = 1e-9
+			break
+		case 181: // µ  micro	greek "mu"
+		case 956:	// because this μ is different from this µ
+		case 117: // u - easier to type, so we let it pass
+			mult = 1e-6
+			break
+		case 109: // m	milli
+			mult = 1e-3
+			break
+		case 107: // k kilo
+			mult = 1e3
+			break
+		case 77: // M Mega
+			mult = 1e6
+			break
+		case 71: // G Giga
+			mult = 1e9
+			break
+		case 84:  // T Tera
+			mult = 1e12
+			break
+		case 80: // P Peta
+			mult = 1e15
+			break
+		case 69: // E Exa
+			mult = 1e18
+			break
+		case 90: // Z Zeta
+			mult = 1e21
+			break
+		case 89: // Y Yotta
+			mult = 1e24
+			break
+	endSwitch
+	return mult
+end
 
 //********************************************************************************************************
 //**********************************************GUIPSetVar**************************************************
@@ -106,7 +483,6 @@ Function GUIPSIsetVarProc(sva) : SetVariableControl
 			doalert 0, "trouble"
 			return 0
 		endif
-		
 		
 		if (sva.eventCode  == 8)		// finish edit
 			mult = GUIPSISetvarSetMult (SIprefix)
@@ -439,7 +815,7 @@ Function GUIPSISetVarSetMinIncr(panelName, setVariableName, minIncr)
 	StructPut/S info, infoStr
 	SetVariable $setVariableName win=$panelName,userdata=infoStr
 end
-	
+
 //**********************************************GUIPTabControl***********************************************
 // The programmer is responsible  for showing the controls for the selected tab, and hiding controls for other tabs.  This can get out of hand quickly if your
 // tab controls are complicated. These procedures provide a way to automate the process of hiding and showing controls. They do no other tab-related
@@ -4014,3 +4390,55 @@ function  SyntaxColor (element)
 end
 
 
+// ***************************** GUIPMassageS_Rec ********************************************
+// The string S_Recreation obtained from the controlinfo operation is almost, but not quite, in
+// key=value, format. This function massages the S_Recreation string into usable key=value pairs
+// where the key separator is kept as "=" and the pair separator is switched from "," to ASCII 001
+// ASCII 001 because it is not going to be found in strings like control titles. If we used ";" for instance 
+// then values composed of strings with ";" in them would be truncated when returned from stringbyKey.
+// Also, Igor on Windows prints num2char (1) as a happy face "", so you can call stringbykey with output of GUIPMassageS_Rec as
+// stringbyKey ("title",  GUIPMassageS_Rec(S_Recreation), "=", num2char(1)) as well as
+// stringbyKey ("title",  GUIPMassageS_Rec(S_Recreation), "=", "")
+// Braces"{" and "}" are also removed so a comma-separated list of values is returned for sizes, e.g. 
+// One gotcha is that multiple userdata+= commands can not be distinguished from each other, so we remove userdata from list
+// There is always the built-in function getUserData to get user data
+function/S GUIPMassageS_Rec(sRec)
+	string sRec		// S_Recreation string for a control obtained from controlInfo
+	
+	// first round is to omit " and replace commas with num2char(1), except inside braces, We do this because commas are used as
+	// list separators inside braces and also as pair separators.  
+	// so tabLabel(0)="export", becomes tabLabel(0)=export
+	// and size={339.00,319.00}, becomes size=339.00,319.00
+	string r0 = ""
+	variable iChar, nChars= strlen (sRec)
+	variable inBrackets= 0
+
+	for (iChar = 0; iChar < nChars; iChar+=1)
+		if ((char2num (sRec[iCHar]) == 44) && (!(inBrackets)))		// comma while not in brackets 
+			r0 += num2char(1)
+		elseif (char2num (sRec[iCHar]) == 123)							// opening bracket
+			inBrackets =1
+		elseif (char2num (sRec[iCHar]) == 125)							// closing bracket
+			inBrackets =0
+		elseif (char2num (sRec[iCHar]) != 34)							// not a "
+			r0 += sRec[iCHar]
+		endif
+	endfor
+	// second round gets rid of control type/control name at start of each line and the "\r" at end of each line
+	// and removes userdata entries.
+	string rString = ""
+	string aLine, aCom
+	variable iLine, nLines= itemsinList(r0, "\r")
+	variable iCom, nComs
+	for (iLine =0; iLine < nLines; iLine +=1)
+		aLine = StringFromList(iLine, r0, "\r")
+		nComs = itemsinList(aLine,num2char(1))
+		for (iCom = 1; iCom < nCOms; iCOm +=1)
+			aCom = StringFromList(iCom, aLine, num2char(1))
+			if (cmpstr (aCom [0,7], "userdata"))
+				rString += aCom  + num2char(1)
+			endif
+		endfor
+	endfor
+	return rString
+end

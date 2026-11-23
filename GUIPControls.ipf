@@ -40,8 +40,10 @@ Structure SIsetVar2Struct
 	double valMin				// minimum val variable can take, or -INF if no limit. In  base units, not SI
 	double valMax				// maximum val variable can take, or INF if no limit.  In not base units, not SI
 	double increment			// increment that is applied when up and down arrows are pressed.  In base units, not SI
-	double minIncrement			// minimum allowed increment, if autoIncrement is on. In base units, not SI
+	double minIncrement		// minimum allowed increment, if autoIncrement is on. In base units, not SI
 	uchar adjustIncrement		// set automatically adjust increment
+	int32 wavePnt				// if the controlled variable is a point in a wave, this number is the index. Set to -1 if regular variable
+	
 EndStructure
 
 
@@ -49,7 +51,7 @@ EndStructure
 //*****************************************************************************************************
 // Modifies a setvariable control to use GUIPSIsetVarProc
 // Last Modified: 2026/11/17 by Jamie Boyd - first version
-function GUIPSIsetVar2Enable (panelName, setVariableName, addFuncStr, MinVal, MaxVal, MinIncr, adjustIncr, nDisplayDigits, unitStr, theVariablePath)
+function GUIPSIsetVar2Enable (panelName, setVariableName, addFuncStr, MinVal, MaxVal, MinIncr, adjustIncr, nDisplayDigits, unitStr, theVariablePath, wavePnt)
 	string panelName			// name of panel control is on, or empty string for topmost window
 	string setVariableName		// name of control
 	string addFuncStr			// name of additional setvariable function to run after adjusting value of variable, or "" if no function 
@@ -59,15 +61,26 @@ function GUIPSIsetVar2Enable (panelName, setVariableName, addFuncStr, MinVal, Ma
 	variable adjustIncr			// set to automatically adjust increment to 1% of current value
 	variable nDisplayDigits		// number of digits to display in the setvariable
 	string UnitStr				// base units of variable, e.g. s, m, Hz
-	string theVariablePath		// full path to the variable we want to link to
-	
+	string theVariablePath	// full path to the variable or wave we want to link to
+	variable wavePnt			// if the controlled variable is a point in a wave, this number is the index. Set to -1 if regular variable
 	
 	// reference the variable we are to control (theVar) - we are passed the path to the variable so make NVAR reference
 	// theVar is always kept in base units. 
-	NVAR/Z theVar = $theVariablePath
-	if (!(NVAR_EXISTS (theVar)))
-		doalert 0, "Requested variable " + theVariablePath + " does not exist."
-		return 1
+	if (wavePnt < 0)
+		NVAR/Z theVar = $theVariablePath
+		if (!(NVAR_EXISTS (theVar)))
+			doalert 0, "Requested variable " + theVariablePath + " does not exist."
+			return 1
+		endif
+	else
+		WAVE/Z theVarWave = $theVariablePath
+		if (!(WAVEEXISTS (theVarWave)))
+			doalert 0, "Requested wave " + theVariablePath + " does not exist."
+			return 1
+		elseif ((numpnts (theVarWave) -1) < wavePnt)
+			doalert 0, "Requested wave " + theVariablePath + " has less than " + num2str (wavePnt) +  " points."
+			return 1
+		endif
 	endif
 	// make the shadow variable we display in the setvar, 
 	// value of the theVar = shadowVariable * info.multiplier
@@ -89,6 +102,8 @@ function GUIPSIsetVar2Enable (panelName, setVariableName, addFuncStr, MinVal, Ma
 	// needed info is stored in a struct in setvariable's INFO user data
 	struct SIsetVar2Struct info
 	info.nDisplayDigits = nDisplayDigits
+	// copy param for wavePoint
+	info.wavePnt = wavePnt
 	// copy param for minIncrement, it is in base units
 	info.minIncrement = MinIncr
 	// copy param for auto adjusting increment
@@ -108,7 +123,11 @@ function GUIPSIsetVar2Enable (panelName, setVariableName, addFuncStr, MinVal, Ma
 	info.multiplier = 1
 	GUIPSISetvar2SetSI (theVar, info)
 	// set dependency formula for shadowVar
-	setformula theShadowVar theVariablePath  + " / " + num2str (info.multiplier)
+	if (wavePnt < 0)
+		setformula theShadowVar theVariablePath  + " / " + num2str (info.multiplier)
+	else
+		setformula theShadowVar theVariablePath + "[" +  num2str (info.wavePnt) + "] / " + num2str (info.multiplier)
+	endif
 	// copy the info structure into a string so it can be userdata for the setvariable
 	string infoStr
 	StructPut/S info, infoStr
@@ -138,10 +157,14 @@ Function GUIPSIsetVar2Proc(sva) : SetVariableControl
 			break
 		case 3:			// 3 Live update - called for up and down arrows, and some other un-wanted events
 			if ((sva.mousePart == 1) || (sva.mousePart == 2)) 	// filters out unwanted events
-				// make a reference to the variable pointed to by the PATH user data
-				NVAR theVar = $GetUserData(sva.win, sva.ctrlName, "PATH")
 				// get the info structure from INFO user data
 				StructGet/S info, GetUserData(sva.win, sva.ctrlName, "INFO")
+				// make a reference to the variable or wave pointed to by the PATH user data
+				if (info.wavePnt < 0)
+					NVAR theVar = $GetUserData(sva.win, sva.ctrlName, "PATH")
+				else
+					WAVE theVarWave= $GetUserData(sva.win, sva.ctrlName, "PATH")
+				endif
 				// check for modifiers for increment and update the variable
 				// updating the variable will cause a dependency update event where we will adjust setvariable appearance, if necessary
 				if ((sva.eventMod & 8) || (sva.eventMod & 4))// modifiers command/ctrl or option/alt
@@ -163,23 +186,44 @@ Function GUIPSIsetVar2Proc(sva) : SetVariableControl
 						ctrlVal += info.increment/info.multiplier
 						ctrlVal -= increment/info.multiplier
 					endif
-					theVar = ctrlVal * info.multiplier
+					if (info.wavePnt < 0)
+						theVar = ctrlVal * info.multiplier
+					else
+						theVarWave [info.wavePnt] = ctrlVal * info.multiplier
+					endif
 				else
-					theVar = sva.dval * info.multiplier
+					if (info.wavePnt < 0)
+						theVar = sva.dval * info.multiplier
+					else
+						theVarWave [info.wavePnt] = sva.dval * info.multiplier
+					endif
 				endif
 				if (abs(theVar) < 1e-21)
-					theVar = 0
+					if (info.wavePnt < 0)
+						theVar = 0
+					else
+						theVarWave [info.wavePnt]  = 0
+					endif
 				endif
 				// run optional function
 				FUNCREF  GUIPprotoFuncVSS extraFunc = $GetUserData(sva.win, sva.ctrlName, "FUNCSTR") //reference to additional function to run, if any
-				extraFunc (theVar, sva.win, sva.ctrlName)
+				if (info.wavePnt < 0)
+					extraFunc (theVar, sva.win, sva.ctrlName)
+				else
+					extraFunc (theVarWave [info.wavePnt], sva.win, sva.ctrlName)
+				endif
 			endif
 			break
 		case 8:			// 8 End Edit - called after an edit in the setvariable contents.
 			// make a reference to the variable pointed to by the path
-			NVAR theVar = $GetUserData(sva.win, sva.ctrlName, "PATH")
-			// get the info structure from INFO  user data
+			// get the info structure from INFO user data
 			StructGet/S info, GetUserData(sva.win, sva.ctrlName, "INFO")
+			// make a reference to the variable or wave pointed to by the PATH user data
+			if (info.wavePnt < 0)
+				NVAR theVar = $GetUserData(sva.win, sva.ctrlName, "PATH")
+			else
+				WAVE theVarWave= $GetUserData(sva.win, sva.ctrlName, "PATH")
+			endif
 			// parse string that user entered.
 			string ctrlValueStr		// value use typed, may contain exponent notation, in format like E3, e3, E-3, e-3
 			string ctrlSIPrefixStr	// SI prefix, what we care about
@@ -216,20 +260,35 @@ Function GUIPSIsetVar2Proc(sva) : SetVariableControl
 			StructPut/S info, infoStr
 			SetVariable $sva.ctrlname win=$sva.win, userdata(INFO)=infoStr
 			// set theVar, which will call dependency update
-			theVar = sva.dval * info.multiplier
-			
+			if (info.wavePnt < 0)
+				theVar = sva.dval * info.multiplier
+			else
+				theVarWave [info.wavePnt] =sva.dval * info.multiplier
+			endif
 			// run optional function
 			FUNCREF  GUIPprotoFuncVSS extraFunc = $GetUserData(sva.win, sva.ctrlName, "FUNCSTR") //reference to additional function to run, if any
-			extraFunc (theVar, sva.win, sva.ctrlName)
+			if (info.wavePnt < 0)
+				extraFunc (theVar, sva.win, sva.ctrlName)
+			else
+				extraFunc (theVarWave[info.wavePnt], sva.win, sva.ctrlName)
+			endif
 			break
 		case 6:   // "6 Value changed by dependency update"
 			// get the info structure from INFO user data
 			StructGet/S info, GetUserData(sva.win, sva.ctrlName, "INFO")
 			// make a reference to the variable pointed to by the path
-			NVAR theVar = $GetUserData(sva.win, sva.ctrlName, "PATH")
-			GUIPSISetvar2SetSI (theVar, info)
-			if (info.adjustIncrement)
-				info.increment = GUIPSetVar2SetIncr(theVar, info.minIncrement)
+			if (info.wavePnt < 0)
+				NVAR theVar = $GetUserData(sva.win, sva.ctrlName, "PATH")
+				GUIPSISetvar2SetSI (theVar, info)
+				if (info.adjustIncrement)
+					info.increment = GUIPSetVar2SetIncr(theVar, info.minIncrement)
+				endif
+			else
+				WAVE theVarWave = $GetUserData(sva.win, sva.ctrlName, "PATH")
+				GUIPSISetvar2SetSI (theVarWave[info.wavePnt], info)
+				if (info.adjustIncrement)
+					info.increment = GUIPSetVar2SetIncr(theVarWave[info.wavePnt], info.minIncrement)
+				endif
 			endif
 			string formatStr = ""
 			sprintf formatStr, "%%.%dg %c%s", info.nDisplayDigits, info.SIprefix, GetUserData(sva.win, sva.ctrlName, "UNITS")
@@ -238,7 +297,11 @@ Function GUIPSIsetVar2Proc(sva) : SetVariableControl
 			SetVariable $sva.ctrlname win=$sva.win, limits={info.valMin/info.multiplier, info.valMax/info.multiplier, info.increment/info.multiplier}, format=formatStr, userdata(INFO)=infoStr
 			// re-set dependency formula for shadowVar
 			NVAR theShadowVar = $"root:packages:GUIP_shadows:" + sva.win + ":" + sva.ctrlName
-			setformula theShadowVar GetUserData(sva.win, sva.ctrlName, "PATH")  + " / " + num2str (info.multiplier)
+			if (info.wavePnt < 0)
+				setformula theShadowVar GetUserData(sva.win, sva.ctrlName, "PATH")  + " / " + num2str (info.multiplier)
+			else
+				setformula theShadowVar GetUserData(sva.win, sva.ctrlName, "PATH")  + "[" +  num2str (info.wavePnt) + "] / " + num2str (info.multiplier)
+			endif
 			break
 	endswitch
 	return 0

@@ -3,6 +3,7 @@
 #pragma IgorVersion=6.1
 #pragma version = 1.1
 
+// Modified: 2026/11/24 by Jamie Boyd added another mehod for SI setvariables
 //	Modified: 2026/08/31 by Jamie Boyd added another method for 3-position toggle switch
 //	Modified: 2026/06/26 by Jamie Boyd better handling of sliders moving together
 //	Modified: 2026/06/19 by Jamie Boyd added extra option for MinMax slider
@@ -15,7 +16,7 @@
 #include "GUIPBinarySearch"
 
 
-//**********************************************GUIPSetVar2 **************************************************
+//********************************************** GUIPSetVar2 **************************************************
 // GUIPSIsetVar2Proc is another SetVariable Proc for SI Prefixes, but WITHOUT using the Wavemetrics %w Conversion Specifier
 // The %w formatting specifier prints very large or small numbers in an easily readable manner using an SI prefix such as µ, m, k, M, etc
 // It would be nice to use this in a setvariable control, especially if a large range of numbers might be displayed. Unfortunately, the manual says:
@@ -26,24 +27,23 @@
 // the shadow variable is 1 and is displayed in the setvariable with format "%.4g mV". When the shadow variable is updated in the Setvariable, the control procedure
 // updates the real variable accordingly. The shadow variable has a dependency applied so that when the real variable is changed, the shadow variable gets updated. 
 
-//		pressing command/ctrl when clicking on the setvariable means multiply the current setvariable increment by 10
-//		option/Alt means divide the increment by10 
-//		shift-command/ctrl means multiply by 100
+//	pressing command/ctrl when clicking on the setvariable means multiply the current setvariable increment by 10
+//	option/Alt means divide the increment by10 
+//	shift-command/ctrl means multiply by 100
 // 	shift-option/alt means divide by 100
 
 
-// Data structure for SI setvar
+// Data structure for SI setvar 2
 Structure SIsetVar2Struct
-	uchar SIprefix				// current SI prefix
-	double multiplier			// multiplier corresponding to current SI prefix
-	uchar nDisplayDigits		// number of digits to display
-	double valMin				// minimum val variable can take, or -INF if no limit. In  base units, not SI
-	double valMax				// maximum val variable can take, or INF if no limit.  In not base units, not SI
+	uchar SIprefix			// current SI prefix
+	double multiplier		// multiplier corresponding to current SI prefix
+	uchar nDisplayDigits	// number of digits to display
+	double valMin			// minimum val variable can take, or -INF if no limit. In  base units, not SI
+	double valMax			// maximum val variable can take, or INF if no limit.  In not base units, not SI
 	double increment			// increment that is applied when up and down arrows are pressed.  In base units, not SI
 	double minIncrement		// minimum allowed increment, if autoIncrement is on. In base units, not SI
-	uchar adjustIncrement		// set automatically adjust increment
-	int32 wavePnt				// if the controlled variable is a point in a wave, this number is the index. Set to -1 if regular variable
-	
+	uchar adjustIncrement	// set automatically adjust increment
+	int32 wavePnt			// if the controlled variable is a point in a wave, this number is the index. Set to -1 if regular variable
 EndStructure
 
 
@@ -135,16 +135,61 @@ function GUIPSIsetVar2Enable (panelName, setVariableName, addFuncStr, MinVal, Ma
 	string formatStr
 	sprintf formatStr, "%%.%dg %c%s", info.nDisplayDigits, info.SIprefix, unitStr
 	// edit setvariable
-	SetVariable $setVariableName win=$panelName, proc=GUIPSIsetVar2Proc, value = theShadowVar, format=formatStr
+	SetVariable $setVariableName win=$panelName, proc=GUIPSIsetVar2Proc, value = theShadowVar, format=formatStr, live=1
 	SetVariable $setVariableName win=$panelName, userdata(INFO)=infoStr, userData(FUNCSTR)=addFuncStr, userData(UNITS)=unitStr, userData (PATH)=theVariablePath
 	SetVariable $setVariableName win=$panelName, limits={info.valMin/info.multiplier, info.valMax/info.multiplier, info.increment/info.multiplier}
 end
 
 
+
+Function GUIPSIsetVar2SetLimits(panelName, ctrlName, valMin, valMax)
+	string panelName
+	String ctrlName
+	variable valMin
+	variable valMax
+	
+	Struct SIsetVar2Struct info
+	String infoStr
+	// get the info structure from INFO user data
+	StructGet/S info, GetUserData(panelName, ctrlName, "INFO")
+	// set min and max
+	info.valMin = valMin
+	info.valMax = valMax
+	// save info struct in user data
+	StructPut/S info, infoStr
+	SetVariable $ctrlname win=$panelName, userdata(INFO)=infoStr
+	// change setvariable limits
+	SetVariable $ctrlname win=$panelName, limits={info.valMin/info.multiplier, info.valMax/info.multiplier, info.increment/info.multiplier}
+end
+
+
+// unsets autoincrement
+Function GUIPSIsetVar2SetIncrement(panelName, ctrlName, increment)
+	string panelName
+	String ctrlName
+	variable increment
+	
+	Struct SIsetVar2Struct info
+	String infoStr
+	// get the info structure from INFO user data
+	StructGet/S info, GetUserData(panelName, ctrlName, "INFO")
+	// set increment
+	info.increment = increment
+	info.minIncrement = max(increment, info.minIncrement)
+	info.adjustIncrement = 0
+	// save info struct in user data
+	StructPut/S info, infoStr
+	SetVariable $ctrlname win=$panelName, userdata(INFO)=infoStr
+	// change setvariable limits
+	SetVariable $ctrlname win=$panelName, limits={info.valMin/info.multiplier, info.valMax/info.multiplier, info.increment/info.multiplier}
+end
+
+
+
+
 Function GUIPSIsetVar2Proc(sva) : SetVariableControl
 	STRUCT WMSetVariableAction &sva
 
-	STRUCT WMSetVariableAction mysva
 	Struct SIsetVar2Struct info
 	String infoStr
 
@@ -174,9 +219,9 @@ Function GUIPSIsetVar2Proc(sva) : SetVariableControl
 						increment *= 100
 					elseif ((sva.eventMod & 6) == 6) // divide by 100
 						increment /= 100
-					elseif  (sva.eventMod & 8)  //mult by 10
+					elseif  ((sva.eventMod & 8) == 8)  //mult by 10
 						increment *= 10
-					elseif  (sva.eventMod & 4)	// divide by 10
+					elseif  ((sva.eventMod & 4) == 4)	// divide by 10
 						increment /= 10
 					endif
 					if (sva.mousePart == 1)
